@@ -99,6 +99,12 @@ void ObjectHighlighter::playVideo()
                 hlIter = mHighlights.begin();
             }
         }
+        else if (key == 's')
+        {
+            cv::destroyAllWindows();
+            saveVideoWithHighlights("output.mp4", "ignored");
+            break;
+        }
 
         ++framec;
     }
@@ -108,6 +114,54 @@ void ObjectHighlighter::playVideo()
 
 void ObjectHighlighter::saveVideoWithHighlights(const std::string &outputPath, const std::string &format)
 {
+    if (!mCap.isOpened())
+    {
+        cout << "No video loaded." << endl;
+        return;
+    }
+
+    cv::VideoWriter writer = cv::VideoWriter(outputPath,
+                                             cv::VideoWriter::fourcc('m', 'p', '4', 'v'),
+                                             mCap.get(cv::CAP_PROP_FPS),
+                                             cv::Size(mCap.get(cv::CAP_PROP_FRAME_WIDTH), mCap.get(cv::CAP_PROP_FRAME_HEIGHT)));
+
+    if (!writer.isOpened())
+    {
+        cout << "Writer not opened." << endl;
+        return;
+    }
+
+    mCap.set(cv::CAP_PROP_POS_FRAMES, 0);
+
+    std::vector<Highlight>::iterator hlIter;
+    bool anyHighlights = !mHighlights.empty();
+    if (anyHighlights)
+    {
+        hlIter = mHighlights.begin();
+    }
+
+    cv::Mat frame;
+    uint framec = 0;
+    while (mCap.read(frame))
+    {
+        if (anyHighlights && hlIter->frame <= framec)
+        {
+            while (hlIter->frame < framec)
+            {
+                ++hlIter;
+            }
+
+            while (hlIter->frame == framec)
+            {
+                cv::rectangle(frame, hlIter->box, cv::Scalar(0, 255, 0));
+                ++hlIter;
+            }
+        }
+
+        writer.write(frame);
+
+        ++framec;
+    }
 }
 
 void ObjectHighlighter::captureFrameWithHighlights(const std::string &outputPath, const uint &nframe)
