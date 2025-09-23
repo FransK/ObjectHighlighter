@@ -26,6 +26,9 @@ void ObjectHighlighter::objectSelection(cv::Mat &frame)
         hl.box = bbox;
         mHighlights.push_back(hl);
         cout << "Added highlight: " << hl.frame << endl;
+
+        cv::rectangle(frame, bbox, cv::Scalar(0, 255, 0));
+        // TODO: Sort highlights so they can be added earlier in video
     }
 }
 
@@ -51,12 +54,12 @@ void ObjectHighlighter::playVideo()
     {
         if (anyHighlights && hlIter->frame <= framec)
         {
-            while (hlIter->frame < framec)
+            while (hlIter->frame < framec && hlIter != mHighlights.end())
             {
                 ++hlIter;
             }
 
-            while (hlIter->frame == framec)
+            while (hlIter->frame == framec && hlIter != mHighlights.end())
             {
                 cout << "Drawing rectangle on frame: " << framec << endl;
                 cv::rectangle(frame, hlIter->box, cv::Scalar(0, 255, 0));
@@ -79,6 +82,8 @@ void ObjectHighlighter::playVideo()
             if (anyHighlights)
             {
                 hlIter = mHighlights.begin();
+                std::string outputPath = "img_" + std::to_string(framec) + ".jpg";
+                captureFrameWithHighlights(outputPath, frame);
             }
         }
         else if (key == 'r')
@@ -164,6 +169,7 @@ void ObjectHighlighter::saveVideoWithHighlights(const std::string &outputPath, c
     }
 }
 
-void ObjectHighlighter::captureFrameWithHighlights(const std::string &outputPath, const uint &nframe)
+void ObjectHighlighter::captureFrameWithHighlights(const std::string &outputPath, const cv::Mat &frame)
 {
+    cv::imwrite(outputPath, frame);
 }

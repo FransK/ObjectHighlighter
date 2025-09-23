@@ -17,7 +17,7 @@ public:
     void objectSelection(cv::Mat &frame);
     void playVideo() override;
     void saveVideoWithHighlights(const std::string &outputPath, const std::string &format);
-    void captureFrameWithHighlights(const std::string &outputPath, const uint &nframe);
+    void captureFrameWithHighlights(const std::string &outputPath, const cv::Mat &frame);
 
 private:
     std::vector<Highlight> mHighlights;
