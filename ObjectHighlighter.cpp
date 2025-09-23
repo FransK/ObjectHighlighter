@@ -28,7 +28,16 @@ void ObjectHighlighter::objectSelection(cv::Mat &frame)
         cout << "Added highlight: " << hl.frame << endl;
 
         cv::rectangle(frame, bbox, cv::Scalar(0, 255, 0));
-        // TODO: Sort highlights so they can be added earlier in video
+    }
+
+    // Sort highlights by frame number
+    std::sort(mHighlights.begin(), mHighlights.end(), [](Highlight a, Highlight b)
+              { return a.frame < b.frame; });
+
+    cout << "Highlights sorted." << endl;
+    for (auto h : mHighlights)
+    {
+        cout << h.frame << endl;
     }
 }
 
