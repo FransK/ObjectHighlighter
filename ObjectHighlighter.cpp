@@ -147,34 +147,36 @@ void ObjectHighlighter::saveVideoWithHighlights(const std::string &outputPath, c
 
     mCap.set(cv::CAP_PROP_POS_FRAMES, 0);
 
-    std::vector<Highlight>::iterator hlIter;
-    bool anyHighlights = !mHighlights.empty();
-    if (anyHighlights)
-    {
-        hlIter = mHighlights.begin();
-    }
-
     cv::Mat frame;
     uint framec = 0;
-    while (mCap.read(frame))
+
+    if (!mHighlights.empty())
     {
-        if (anyHighlights && hlIter->frame <= framec)
+        auto hlIter = mHighlights.begin();
+
+        while (mCap.read(frame))
         {
-            while (hlIter->frame < framec)
+            while (hlIter->frame < framec && hlIter != mHighlights.end())
             {
                 ++hlIter;
             }
-
-            while (hlIter->frame == framec)
+            while (hlIter->frame == framec && hlIter != mHighlights.end())
             {
                 cv::rectangle(frame, hlIter->box, cv::Scalar(0, 255, 0));
                 ++hlIter;
             }
+
+            writer.write(frame);
+
+            ++framec;
         }
-
-        writer.write(frame);
-
-        ++framec;
+    }
+    else
+    {
+        while (mCap.read(frame))
+        {
+            writer.write(frame);
+        }
     }
 }
 
