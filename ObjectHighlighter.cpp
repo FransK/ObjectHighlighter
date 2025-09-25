@@ -66,7 +66,11 @@ void ObjectHighlighter::playVideo()
     {
         if (!mHighlights.empty())
         {
-            while (hlIter->frame == framec && hlIter != mHighlights.end())
+            while (hlIter != mHighlights.end() && hlIter->frame < framec)
+            {
+                ++hlIter;
+            }
+            while (hlIter != mHighlights.end() && hlIter->frame == framec)
             {
                 cout << "Drawing rectangle on frame: " << framec << endl;
                 cv::rectangle(frame, hlIter->box, cv::Scalar(0, 255, 0));
