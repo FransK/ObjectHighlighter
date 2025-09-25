@@ -102,9 +102,9 @@ void ObjectHighlighter::playVideo()
         else if (key == 's')
         {
             cout << "Saving video parallel." << endl;
-            saveVideoWithHighlights2("output2.mp4", "ignored");
+            saveVideoWithHighlightsParallel("output2.mp4", "ignored");
             cout << "Saving video serial." << endl;
-            saveVideoWithHighlights("output.mp4", "ignored");
+            saveVideoWithHighlightsSerial("output.mp4", "ignored");
             cout << "Video saved." << endl;
             cv::waitKey(0);
         }
@@ -115,67 +115,20 @@ void ObjectHighlighter::playVideo()
     cv::destroyAllWindows();
 }
 
-void ObjectHighlighter::saveVideoWithHighlights(const std::string &outputPath, const std::string &format)
+void ObjectHighlighter::saveVideoWithHighlightsSerial(const std::string &outputPath, const std::string &format)
 {
     auto start = std::chrono::high_resolution_clock::now();
 
-    if (!mCap.isOpened())
-    {
-        cout << "No video loaded." << endl;
-        return;
-    }
-
-    cv::VideoWriter writer = cv::VideoWriter(outputPath,
-                                             cv::VideoWriter::fourcc('m', 'p', '4', 'v'),
-                                             mCap.get(cv::CAP_PROP_FPS),
-                                             cv::Size(mCap.get(cv::CAP_PROP_FRAME_WIDTH), mCap.get(cv::CAP_PROP_FRAME_HEIGHT)));
-
-    if (!writer.isOpened())
-    {
-        cout << "Writer not opened." << endl;
-        return;
-    }
-
-    mCap.set(cv::CAP_PROP_POS_FRAMES, 0);
-
-    cv::Mat frame;
-
-    if (!mHighlights.empty())
-    {
-        auto hlIter = mHighlights.begin();
-        uint framec = 0;
-
-        while (mCap.read(frame))
-        {
-            while (hlIter->frame < framec && hlIter != mHighlights.end())
-            {
-                ++hlIter;
-            }
-            while (hlIter->frame == framec && hlIter != mHighlights.end())
-            {
-                cv::rectangle(frame, hlIter->box, cv::Scalar(0, 255, 0));
-                ++hlIter;
-            }
-
-            writer.write(frame);
-
-            ++framec;
-        }
-    }
-    else
-    {
-        while (mCap.read(frame))
-        {
-            writer.write(frame);
-        }
-    }
+    readFrames();
+    drawHighlights();
+    writeFrames(outputPath, format);
 
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration = end - start;
     cout << "Save video time: " << duration.count() << "s" << endl;
 }
 
-void ObjectHighlighter::saveVideoWithHighlights2(const std::string &outputPath, const std::string &format)
+void ObjectHighlighter::saveVideoWithHighlightsParallel(const std::string &outputPath, const std::string &format)
 {
     auto start = std::chrono::high_resolution_clock::now();
 

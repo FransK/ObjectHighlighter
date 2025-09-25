@@ -20,8 +20,8 @@ public:
     void captureFrameWithHighlights(const std::string &outputPath, const cv::Mat &frame);
     void objectSelection(cv::Mat &frame);
     void playVideo() override;
-    void saveVideoWithHighlights(const std::string &outputPath, const std::string &format);
-    void saveVideoWithHighlights2(const std::string &outputPath, const std::string &format);
+    void saveVideoWithHighlightsSerial(const std::string &outputPath, const std::string &format);
+    void saveVideoWithHighlightsParallel(const std::string &outputPath, const std::string &format);
 
 private:
     std::vector<Highlight> mHighlights; // TODO Further optimization: Add index into highlights for rewinding
