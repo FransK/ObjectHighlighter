@@ -113,12 +113,12 @@ void ObjectHighlighter::playVideo()
         }
         else if (key == 's')
         {
-            cv::destroyAllWindows();
             cout << "Saving video parallel." << endl;
             saveVideoWithHighlights2("output2.mp4", "ignored");
             cout << "Saving video serial." << endl;
             saveVideoWithHighlights("output.mp4", "ignored");
-            break;
+            cout << "Video saved." << endl;
+            cv::waitKey(0);
         }
 
         ++framec;
@@ -233,26 +233,27 @@ void ObjectHighlighter::readFrames()
 
 void ObjectHighlighter::drawHighlights()
 {
-    if (!mHighlights.empty())
+    auto iter = mHighlights.begin();
+    uint framec = 0;
+    bool hasHighlights = !mHighlights.empty();
+
+    while (true)
     {
-        auto iter = mHighlights.begin();
-        uint framec = 0;
+        std::unique_lock inputLock(mInputMutex);
+        mInputCv.wait(inputLock, [this]
+                      { return !mInputFrames.empty() || mReadingFinished; });
 
-        while (true)
+        if (mInputFrames.empty() && mReadingFinished)
         {
-            std::unique_lock inputLock(mInputMutex);
-            mInputCv.wait(inputLock, [this]
-                          { return !mInputFrames.empty() || mReadingFinished; });
+            break;
+        }
 
-            if (mInputFrames.empty() && mReadingFinished)
-            {
-                break;
-            }
+        cv::Mat frame = mInputFrames.front();
+        mInputFrames.pop();
+        inputLock.unlock();
 
-            cv::Mat frame = mInputFrames.front();
-            mInputFrames.pop();
-            inputLock.unlock();
-
+        if (hasHighlights)
+        {
             while (iter != mHighlights.end() && iter->frame < framec)
             {
                 ++iter;
@@ -262,37 +263,14 @@ void ObjectHighlighter::drawHighlights()
                 cv::rectangle(frame, iter->box, cv::Scalar(0, 255, 0));
                 ++iter;
             }
-
-            std::unique_lock processedLock(mProcessedMutex);
-            mProcessedFrames.push(frame);
-            processedLock.unlock();
-            mProcessedCv.notify_one();
-
-            ++framec;
         }
-    }
-    else
-    {
-        while (true)
-        {
-            std::unique_lock inputLock(mInputMutex);
-            mInputCv.wait(inputLock, [this]
-                          { return !mInputFrames.empty() || mReadingFinished; });
 
-            if (mInputFrames.empty() && mReadingFinished)
-            {
-                break;
-            }
+        std::unique_lock processedLock(mProcessedMutex);
+        mProcessedFrames.push(frame);
+        processedLock.unlock();
+        mProcessedCv.notify_one();
 
-            cv::Mat frame = mInputFrames.front();
-            mInputFrames.pop();
-            inputLock.unlock();
-
-            std::unique_lock processedLock(mProcessedMutex);
-            mProcessedFrames.push(frame);
-            processedLock.unlock();
-            mProcessedCv.notify_one();
-        }
+        ++framec;
     }
 
     std::unique_lock lock(mProcessedMutex);
