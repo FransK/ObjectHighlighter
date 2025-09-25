@@ -1,4 +1,6 @@
+#include <chrono>
 #include <iostream>
+#include <thread>
 
 #include "opencv2/features2d.hpp"
 #include "opencv2/imgproc.hpp"
@@ -35,10 +37,6 @@ void ObjectHighlighter::objectSelection(cv::Mat &frame)
               { return a.frame < b.frame; });
 
     cout << "Highlights sorted." << endl;
-    for (auto h : mHighlights)
-    {
-        cout << h.frame << endl;
-    }
 }
 
 void ObjectHighlighter::playVideo()
@@ -116,6 +114,9 @@ void ObjectHighlighter::playVideo()
         else if (key == 's')
         {
             cv::destroyAllWindows();
+            cout << "Saving video parallel." << endl;
+            saveVideoWithHighlights2("output2.mp4", "ignored");
+            cout << "Saving video serial." << endl;
             saveVideoWithHighlights("output.mp4", "ignored");
             break;
         }
@@ -128,6 +129,8 @@ void ObjectHighlighter::playVideo()
 
 void ObjectHighlighter::saveVideoWithHighlights(const std::string &outputPath, const std::string &format)
 {
+    auto start = std::chrono::high_resolution_clock::now();
+
     if (!mCap.isOpened())
     {
         cout << "No video loaded." << endl;
@@ -148,11 +151,11 @@ void ObjectHighlighter::saveVideoWithHighlights(const std::string &outputPath, c
     mCap.set(cv::CAP_PROP_POS_FRAMES, 0);
 
     cv::Mat frame;
-    uint framec = 0;
 
     if (!mHighlights.empty())
     {
         auto hlIter = mHighlights.begin();
+        uint framec = 0;
 
         while (mCap.read(frame))
         {
@@ -177,6 +180,155 @@ void ObjectHighlighter::saveVideoWithHighlights(const std::string &outputPath, c
         {
             writer.write(frame);
         }
+    }
+
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration = end - start;
+    cout << "Save video time: " << duration.count() << "s" << endl;
+}
+
+void ObjectHighlighter::saveVideoWithHighlights2(const std::string &outputPath, const std::string &format)
+{
+    auto start = std::chrono::high_resolution_clock::now();
+
+    mReadingFinished = false;
+    mProcessingFinished = false;
+    mInputFrames = {};
+    mProcessedFrames = {};
+
+    {
+        std::jthread readerThread(&ObjectHighlighter::readFrames, this);
+        std::jthread processorThread(&ObjectHighlighter::drawHighlights, this);
+        std::jthread writerThread(&ObjectHighlighter::writeFrames, this, outputPath, format);
+    }
+
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration = end - start;
+    cout << "Save video time: " << duration.count() << "s" << endl;
+}
+
+void ObjectHighlighter::readFrames()
+{
+    if (!mCap.isOpened())
+    {
+        cout << "No video loaded." << endl;
+        return;
+    }
+
+    mCap.set(cv::CAP_PROP_POS_FRAMES, 0);
+
+    cv::Mat frame;
+    while (mCap.read(frame))
+    {
+        std::unique_lock lock(mInputMutex);
+        mInputFrames.push(frame.clone());
+        lock.unlock();
+        mInputCv.notify_one();
+    }
+
+    std::unique_lock lock(mInputMutex);
+    mReadingFinished = true;
+    mInputCv.notify_all();
+}
+
+void ObjectHighlighter::drawHighlights()
+{
+    if (!mHighlights.empty())
+    {
+        auto iter = mHighlights.begin();
+        uint framec = 0;
+
+        while (true)
+        {
+            std::unique_lock inputLock(mInputMutex);
+            mInputCv.wait(inputLock, [this]
+                          { return !mInputFrames.empty() || mReadingFinished; });
+
+            if (mInputFrames.empty() && mReadingFinished)
+            {
+                break;
+            }
+
+            cv::Mat frame = mInputFrames.front();
+            mInputFrames.pop();
+            inputLock.unlock();
+
+            while (iter != mHighlights.end() && iter->frame < framec)
+            {
+                ++iter;
+            }
+            while (iter != mHighlights.end() && iter->frame == framec)
+            {
+                cv::rectangle(frame, iter->box, cv::Scalar(0, 255, 0));
+                ++iter;
+            }
+
+            std::unique_lock processedLock(mProcessedMutex);
+            mProcessedFrames.push(frame);
+            processedLock.unlock();
+            mProcessedCv.notify_one();
+
+            ++framec;
+        }
+    }
+    else
+    {
+        while (true)
+        {
+            std::unique_lock inputLock(mInputMutex);
+            mInputCv.wait(inputLock, [this]
+                          { return !mInputFrames.empty() || mReadingFinished; });
+
+            if (mInputFrames.empty() && mReadingFinished)
+            {
+                break;
+            }
+
+            cv::Mat frame = mInputFrames.front();
+            mInputFrames.pop();
+            inputLock.unlock();
+
+            std::unique_lock processedLock(mProcessedMutex);
+            mProcessedFrames.push(frame);
+            processedLock.unlock();
+            mProcessedCv.notify_one();
+        }
+    }
+
+    std::unique_lock lock(mProcessedMutex);
+    mProcessingFinished = true;
+    mProcessedCv.notify_all();
+}
+
+void ObjectHighlighter::writeFrames(const std::string &outputPath, const std::string &format)
+{
+    cv::VideoWriter writer = cv::VideoWriter(outputPath,
+                                             cv::VideoWriter::fourcc('m', 'p', '4', 'v'),
+                                             mCap.get(cv::CAP_PROP_FPS),
+                                             cv::Size(mCap.get(cv::CAP_PROP_FRAME_WIDTH), mCap.get(cv::CAP_PROP_FRAME_HEIGHT)));
+
+    if (!writer.isOpened())
+    {
+        cout << "Writer not opened." << endl;
+        return;
+    }
+
+    while (true)
+    {
+        std::unique_lock lock(mProcessedMutex);
+        mProcessedCv.wait(lock, [this]
+                          { return !mProcessedFrames.empty() || mProcessingFinished; });
+
+        if (mProcessedFrames.empty() && mProcessingFinished)
+        {
+            break;
+        }
+
+        cv::Mat frame = mProcessedFrames.front();
+        mProcessedFrames.pop();
+        lock.unlock();
+
+        writer.write(frame);
     }
 }
 
