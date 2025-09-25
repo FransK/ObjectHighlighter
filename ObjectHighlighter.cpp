@@ -76,7 +76,7 @@ void ObjectHighlighter::playVideo()
 
         cv::imshow("Video", frame);
 
-        int key = cv::waitKey(35);
+        int key = cv::waitKey(33); // 30 FPS, update once per frame(ish)
 
         if (key == 'q')
         {
@@ -96,7 +96,7 @@ void ObjectHighlighter::playVideo()
         }
         else if (key == 'z')
         {
-            rewindVideo(290);
+            rewindVideo(300); // 10s
             resetState();
         }
         else if (key == 's')
