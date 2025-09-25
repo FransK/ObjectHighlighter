@@ -1,3 +1,5 @@
 .vscode/
 build/
 *.jpg
+*.pdf
+output*
