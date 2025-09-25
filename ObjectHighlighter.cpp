@@ -52,12 +52,10 @@ void ObjectHighlighter::playVideo()
 
     auto hlIter = mHighlights.begin();
 
-    // Helper lambda to reset state when video position changes
     auto resetState = [&]()
     {
         framec = static_cast<uint>(mCap.get(cv::CAP_PROP_POS_FRAMES));
         hlIter = mHighlights.begin();
-        // Advance iterator to the current frame
         while (hlIter != mHighlights.end() && hlIter->frame < framec)
         {
             ++hlIter;
