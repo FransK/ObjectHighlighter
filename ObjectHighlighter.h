@@ -32,24 +32,27 @@ public:
     void saveVideoWithHighlights(const std::string &outputPath, const std::string &format);
 
 private:
+    struct SaveVideoState
+    {
+        std::queue<cv::Mat> inputFrames{};
+        std::queue<cv::Mat> processedFrames{};
+
+        std::mutex inputMutex;
+        std::mutex processedMutex;
+
+        std::condition_variable inputCv;
+        std::condition_variable processedCv;
+
+        std::atomic<bool> readingFinished{false};
+        std::atomic<bool> processingFinished{false};
+    };
+
     std::vector<Highlight> mHighlights; // TODO Further optimization: Add index into highlights for rewinding
     std::vector<ObjectTracker> mTrackers;
 
-    std::queue<cv::Mat> mInputFrames;
-    std::queue<cv::Mat> mProcessedFrames;
-
-    std::mutex mInputMutex;
-    std::mutex mProcessedMutex;
-
-    std::condition_variable mInputCv;
-    std::condition_variable mProcessedCv;
-
-    std::atomic<bool> mReadingFinished{false};
-    std::atomic<bool> mProcessingFinished{false};
-
-    void readFrames();
-    void drawHighlights();
-    void writeFrames(const std::string &outputPath, const std::string &format);
+    void readFrames(SaveVideoState &state);
+    void drawHighlights(SaveVideoState &state);
+    void writeFrames(const std::string &outputPath, const std::string &format, SaveVideoState &state);
 
     bool handlePlaybackInput(int key, cv::Mat &frame, uint framec, std::vector<Highlight>::iterator &hlIter);
     void drawHighlightsOnFrame(cv::Mat &frame, uint framec, std::vector<Highlight>::iterator &hlIter);
