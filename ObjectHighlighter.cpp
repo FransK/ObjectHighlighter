@@ -72,20 +72,7 @@ void ObjectHighlighter::playVideo()
     cv::destroyAllWindows();
 }
 
-void ObjectHighlighter::saveVideoWithHighlightsSerial(const std::string &outputPath, const std::string &format)
-{
-    auto start = std::chrono::high_resolution_clock::now();
-
-    readFrames();
-    drawHighlights();
-    writeFrames(outputPath, format);
-
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration = end - start;
-    cout << "Save video time: " << duration.count() << "s" << endl;
-}
-
-void ObjectHighlighter::saveVideoWithHighlightsParallel(const std::string &outputPath, const std::string &format)
+void ObjectHighlighter::saveVideoWithHighlights(const std::string &outputPath, const std::string &format)
 {
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -96,6 +83,7 @@ void ObjectHighlighter::saveVideoWithHighlightsParallel(const std::string &outpu
     mInputFrames = {};
     mProcessedFrames = {};
 
+    // Scope for multi-threaded pipeline
     {
         std::jthread readerThread(&ObjectHighlighter::readFrames, this);
         std::jthread processorThread(&ObjectHighlighter::drawHighlights, this);
@@ -143,12 +131,9 @@ bool ObjectHighlighter::handlePlaybackInput(int key, cv::Mat &frame, uint framec
     }
     else if (key == 's')
     {
-        cout << "Saving video parallel." << endl;
-        saveVideoWithHighlightsParallel("output2.mp4", "ignored");
-        cout << "Saving video serial." << endl;
-        saveVideoWithHighlightsSerial("output.mp4", "ignored");
+        cout << "Saving video." << endl;
+        saveVideoWithHighlights("output.mp4", "ignored");
         cout << "Video saved." << endl;
-        cv::waitKey(0); // Pause before resuming playback
     }
 
     return true; // Continue playback
@@ -193,7 +178,6 @@ void ObjectHighlighter::readFrames()
         mInputCv.notify_one();
     }
 
-    std::unique_lock lock(mInputMutex);
     mReadingFinished = true;
     mInputCv.notify_all();
 }
@@ -262,7 +246,6 @@ void ObjectHighlighter::drawHighlights()
         }
     }
 
-    std::unique_lock lock(mProcessedMutex);
     mProcessingFinished = true;
     mProcessedCv.notify_all();
 }
