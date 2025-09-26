@@ -79,6 +79,7 @@ void VideoProcessor::rewindVideo(int frames)
         return;
     }
 
-    int currentFrame = static_cast<int>(mCap.get(cv::CAP_PROP_POS_FRAMES));
+    // Subtract 1 because POS_FRAMES is the next frame read
+    int currentFrame = static_cast<int>(mCap.get(cv::CAP_PROP_POS_FRAMES)) - 1;
     mCap.set(cv::CAP_PROP_POS_FRAMES, std::max(currentFrame - frames, 0));
 }

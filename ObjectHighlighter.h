@@ -41,6 +41,9 @@ private:
     void readFrames();
     void drawHighlights();
     void writeFrames(const std::string &outputPath, const std::string &format);
+
+    bool handlePlaybackInput(int key, cv::Mat &frame, uint framec, std::vector<Highlight>::iterator &hlIter);
+    void drawHighlightsOnFrame(cv::Mat &frame, uint framec, std::vector<Highlight>::iterator &hlIter);
 };
 
 #endif

@@ -24,7 +24,8 @@ void ObjectHighlighter::objectSelection(cv::Mat &frame)
     for (auto bbox : boundingBoxes)
     {
         Highlight hl;
-        hl.frame = static_cast<int>(mCap.get(cv::CAP_PROP_POS_FRAMES));
+        // Subtract 1 because POS_FRAMES gives index of next frame
+        hl.frame = static_cast<int>(mCap.get(cv::CAP_PROP_POS_FRAMES)) - 1;
         hl.box = bbox;
         mHighlights.push_back(hl);
         cout << "Added highlight: " << hl.frame << endl;
@@ -47,73 +48,25 @@ void ObjectHighlighter::playVideo()
         return;
     }
 
+    uint currentFrame = 0;
+    auto iter = mHighlights.begin();
+
     cv::Mat frame;
-    uint framec = 0;
-
-    auto hlIter = mHighlights.begin();
-
-    auto resetState = [&]()
-    {
-        framec = static_cast<uint>(mCap.get(cv::CAP_PROP_POS_FRAMES));
-        hlIter = mHighlights.begin();
-        while (hlIter != mHighlights.end() && hlIter->frame < framec)
-        {
-            ++hlIter;
-        }
-    };
-
     while (mCap.read(frame))
     {
-        if (!mHighlights.empty())
-        {
-            while (hlIter != mHighlights.end() && hlIter->frame < framec)
-            {
-                ++hlIter;
-            }
-            while (hlIter != mHighlights.end() && hlIter->frame == framec)
-            {
-                cout << "Drawing rectangle on frame: " << framec << endl;
-                cv::rectangle(frame, hlIter->box, cv::Scalar(0, 255, 0));
-                ++hlIter;
-            }
-        }
+        drawHighlightsOnFrame(frame, currentFrame, iter);
 
         cv::imshow("Video", frame);
 
-        int key = cv::waitKey(33); // 30 FPS, update once per frame(ish)
+        int key = cv::waitKey(16); // 60 FPS(ish)
 
-        if (key == 'q')
+        if (!handlePlaybackInput(key, frame, currentFrame, iter))
         {
             break;
         }
-        else if (key == 'p')
-        {
-            objectSelection(frame);
-            resetState();
-            std::string outputPath = "img_" + std::to_string(framec) + ".jpg";
-            captureFrameWithHighlights(outputPath, frame);
-        }
-        else if (key == 'r')
-        {
-            rewindVideo(-1);
-            resetState();
-        }
-        else if (key == 'z')
-        {
-            rewindVideo(300); // 10s
-            resetState();
-        }
-        else if (key == 's')
-        {
-            cout << "Saving video parallel." << endl;
-            saveVideoWithHighlightsParallel("output2.mp4", "ignored");
-            cout << "Saving video serial." << endl;
-            saveVideoWithHighlightsSerial("output.mp4", "ignored");
-            cout << "Video saved." << endl;
-            cv::waitKey(0);
-        }
 
-        ++framec;
+        // Update currentFrame to next frame
+        currentFrame = static_cast<uint>(mCap.get(cv::CAP_PROP_POS_FRAMES));
     }
 
     cv::destroyAllWindows();
@@ -150,6 +103,71 @@ void ObjectHighlighter::saveVideoWithHighlightsParallel(const std::string &outpu
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration = end - start;
     cout << "Save video time: " << duration.count() << "s" << endl;
+}
+
+bool ObjectHighlighter::handlePlaybackInput(int key, cv::Mat &frame, uint framec, std::vector<Highlight>::iterator &iter)
+{
+    auto resetHighlightIterator = [&]()
+    {
+        // Sets the highlight iterator to the next set of highlights
+        uint nextFrame = static_cast<uint>(mCap.get(cv::CAP_PROP_POS_FRAMES));
+        iter = std::lower_bound(mHighlights.begin(), mHighlights.end(), nextFrame,
+                                [](const Highlight &h, uint f)
+                                { return h.frame < f; });
+    };
+
+    if (key == 'q')
+    {
+        return false; // Stop playback
+    }
+    else if (key == 'p')
+    {
+        objectSelection(frame);
+        resetHighlightIterator();
+        std::string outputPath = "img_" + std::to_string(framec) + ".jpg";
+        captureFrameWithHighlights(outputPath, frame);
+    }
+    else if (key == 'r')
+    {
+        rewindVideo(-1);
+        resetHighlightIterator();
+    }
+    else if (key == 'z')
+    {
+        rewindVideo(290); // 10s
+        resetHighlightIterator();
+    }
+    else if (key == 's')
+    {
+        cout << "Saving video parallel." << endl;
+        saveVideoWithHighlightsParallel("output2.mp4", "ignored");
+        cout << "Saving video serial." << endl;
+        saveVideoWithHighlightsSerial("output.mp4", "ignored");
+        cout << "Video saved." << endl;
+        cv::waitKey(0); // Pause before resuming playback
+    }
+
+    return true; // Continue playback
+}
+
+void ObjectHighlighter::drawHighlightsOnFrame(cv::Mat &frame, uint framec, std::vector<Highlight>::iterator &iter)
+{
+    if (mHighlights.empty())
+    {
+        return;
+    }
+
+    // Advance iterator to the current frame
+    while (iter != mHighlights.end() && iter->frame < framec)
+    {
+        ++iter;
+    }
+    // Draw all highlights for the current frame
+    while (iter != mHighlights.end() && iter->frame == framec)
+    {
+        cv::rectangle(frame, iter->box, cv::Scalar(0, 255, 0));
+        ++iter;
+    }
 }
 
 void ObjectHighlighter::readFrames()
