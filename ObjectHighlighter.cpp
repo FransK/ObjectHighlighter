@@ -54,51 +54,115 @@ void ObjectHighlighter::playVideo()
         return;
     }
 
-    uint currentFrame = 0;
-    auto iter = mHighlights.begin();
-
-    cv::Mat frame;
-    while (mCap.read(frame))
+    PlaybackState state;
     {
-        drawHighlightsOnFrame(frame, currentFrame, iter);
+        std::jthread readerThread(&ObjectHighlighter::captureFrames, this, std::ref(state));
+        std::jthread processorThread(&ObjectHighlighter::updateTrackers, this, std::ref(state));
+        std::jthread writerThread(&ObjectHighlighter::drawFrames, this, std::ref(state));
+    }
+
+    // uint currentFrame = 0;
+    // auto iter = mHighlights.begin();
+
+    // cv::Mat frame;
+    // while (mCap.read(frame))
+    // {
+    //     drawHighlightsOnFrame(frame, currentFrame, iter);
+    //     trackOnFrame(frame);
+
+    //     cv::imshow("Video", frame);
+
+    //     int key = cv::waitKey(1);
+
+    //     if (!handlePlaybackInput(key, frame, currentFrame, iter))
+    //     {
+    //         break;
+    //     }
+
+    //     // Update currentFrame to next frame
+    //     currentFrame = static_cast<uint>(mCap.get(cv::CAP_PROP_POS_FRAMES));
+    // }
+
+    cv::destroyAllWindows();
+}
+
+void ObjectHighlighter::captureFrames(PlaybackState &state)
+{
+    cv::Mat frame;
+    while (!state.shuttingDown && mCap.read(frame))
+    {
+        std::unique_lock lock(state.inputMutex);
+        state.inputFrames.push(frame.clone());
+        lock.unlock();
+        state.inputCv.notify_one();
+    }
+
+    state.readingFinished = true;
+    state.inputCv.notify_all();
+    cout << "Finished capturing frames." << endl;
+}
+
+void ObjectHighlighter::updateTrackers(PlaybackState &state)
+{
+    while (!state.shuttingDown)
+    {
+        std::unique_lock inputLock(state.inputMutex);
+        state.inputCv.wait(inputLock, [&]
+                           { return !state.inputFrames.empty() || state.readingFinished; });
+
+        if (state.inputFrames.empty() && state.readingFinished)
+        {
+            break;
+        }
+
+        cv::Mat frame = state.inputFrames.front();
+        state.inputFrames.pop();
+        inputLock.unlock();
+
         trackOnFrame(frame);
+
+        std::unique_lock processedLock(state.processedMutex);
+        state.processedFrames.push(frame);
+        processedLock.unlock();
+        state.processedCv.notify_one();
+    }
+
+    state.processingFinished = true;
+    state.processedCv.notify_all();
+    cout << "Finished updating trackers." << endl;
+}
+
+void ObjectHighlighter::drawFrames(PlaybackState &state)
+{
+    while (true)
+    {
+        std::unique_lock lock(state.processedMutex);
+        state.processedCv.wait(lock, [&]
+                               { return !state.processedFrames.empty() || state.processingFinished; });
+
+        if (state.processedFrames.empty() && state.processingFinished)
+        {
+            break;
+        }
+
+        cv::Mat frame = state.processedFrames.front();
+        state.processedFrames.pop();
+        lock.unlock();
 
         cv::imshow("Video", frame);
 
         int key = cv::waitKey(1);
 
-        if (!handlePlaybackInput(key, frame, currentFrame, iter))
+        if (key == 'p')
         {
+            cv::waitKey(0);
+        }
+        else if (key == 'q')
+        {
+            state.shuttingDown = true;
             break;
         }
-
-        // Update currentFrame to next frame
-        currentFrame = static_cast<uint>(mCap.get(cv::CAP_PROP_POS_FRAMES));
     }
-
-    cv::destroyAllWindows();
-}
-
-void ObjectHighlighter::saveVideoWithHighlights(const std::string &outputPath, const std::string &format)
-{
-    auto start = std::chrono::high_resolution_clock::now();
-
-    double currentPos = mCap.get(cv::CAP_PROP_POS_FRAMES);
-
-    SaveVideoState saveState;
-
-    // Scope for multi-threaded pipeline
-    {
-        std::jthread readerThread(&ObjectHighlighter::readFrames, this, std::ref(saveState));
-        std::jthread processorThread(&ObjectHighlighter::drawHighlights, this, std::ref(saveState));
-        std::jthread writerThread(&ObjectHighlighter::writeFrames, this, outputPath, format, std::ref(saveState));
-    }
-
-    mCap.set(cv::CAP_PROP_POS_FRAMES, currentPos);
-
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration = end - start;
-    cout << "Save video time: " << duration.count() << "s" << endl;
 }
 
 bool ObjectHighlighter::handlePlaybackInput(int key, cv::Mat &frame, uint framec, std::vector<Highlight>::iterator &iter)
@@ -178,6 +242,28 @@ void ObjectHighlighter::trackOnFrame(cv::Mat &frame)
             cv::rectangle(frame, tracker.box, cv::Scalar(0, 255, 0));
         }
     }
+}
+
+void ObjectHighlighter::saveVideoWithHighlights(const std::string &outputPath, const std::string &format)
+{
+    auto start = std::chrono::high_resolution_clock::now();
+
+    double currentPos = mCap.get(cv::CAP_PROP_POS_FRAMES);
+
+    SaveVideoState saveState;
+
+    // Scope for multi-threaded pipeline
+    {
+        std::jthread readerThread(&ObjectHighlighter::readFrames, this, std::ref(saveState));
+        std::jthread processorThread(&ObjectHighlighter::drawHighlights, this, std::ref(saveState));
+        std::jthread writerThread(&ObjectHighlighter::writeFrames, this, outputPath, format, std::ref(saveState));
+    }
+
+    mCap.set(cv::CAP_PROP_POS_FRAMES, currentPos);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration = end - start;
+    cout << "Save video time: " << duration.count() << "s" << endl;
 }
 
 void ObjectHighlighter::readFrames(ObjectHighlighter::SaveVideoState &state)
