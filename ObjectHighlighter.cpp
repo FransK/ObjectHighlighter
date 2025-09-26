@@ -4,6 +4,7 @@
 
 #include "opencv2/features2d.hpp"
 #include "opencv2/imgproc.hpp"
+#include "opencv2/tracking.hpp"
 
 #include "ObjectHighlighter.h"
 
@@ -21,14 +22,21 @@ void ObjectHighlighter::objectSelection(cv::Mat &frame)
     std::vector<cv::Rect> boundingBoxes;
     cv::selectROIs("Video", frame, boundingBoxes);
 
+    int currentFrame = static_cast<int>(mCap.get(cv::CAP_PROP_POS_FRAMES)) - 1;
+
     for (auto bbox : boundingBoxes)
     {
         Highlight hl;
-        // Subtract 1 because POS_FRAMES gives index of next frame
-        hl.frame = static_cast<int>(mCap.get(cv::CAP_PROP_POS_FRAMES)) - 1;
+        hl.frame = currentFrame;
         hl.box = bbox;
         mHighlights.push_back(hl);
-        cout << "Added highlight: " << hl.frame << endl;
+
+        ObjectTracker ot;
+        cv::Ptr<cv::Tracker> tracker = cv::TrackerKCF::create();
+        tracker->init(frame, bbox);
+        ot.box = bbox;
+        ot.tracker = tracker;
+        mTrackers.push_back(ot);
 
         cv::rectangle(frame, bbox, cv::Scalar(0, 255, 0));
     }
@@ -36,8 +44,6 @@ void ObjectHighlighter::objectSelection(cv::Mat &frame)
     // Sort highlights by frame number
     std::sort(mHighlights.begin(), mHighlights.end(), [](Highlight a, Highlight b)
               { return a.frame < b.frame; });
-
-    cout << "Highlights sorted." << endl;
 }
 
 void ObjectHighlighter::playVideo()
@@ -55,10 +61,11 @@ void ObjectHighlighter::playVideo()
     while (mCap.read(frame))
     {
         drawHighlightsOnFrame(frame, currentFrame, iter);
+        trackOnFrame(frame);
 
         cv::imshow("Video", frame);
 
-        int key = cv::waitKey(16); // 60 FPS(ish)
+        int key = cv::waitKey(1);
 
         if (!handlePlaybackInput(key, frame, currentFrame, iter))
         {
@@ -156,6 +163,23 @@ void ObjectHighlighter::drawHighlightsOnFrame(cv::Mat &frame, uint framec, std::
     {
         cv::rectangle(frame, iter->box, cv::Scalar(0, 255, 0));
         ++iter;
+    }
+}
+
+void ObjectHighlighter::trackOnFrame(cv::Mat &frame)
+{
+    if (mTrackers.empty())
+    {
+        return;
+    }
+
+    // Draw all highlights for the current frame
+    for (auto tracker : mTrackers)
+    {
+        if (tracker.tracker->update(frame, tracker.box))
+        {
+            cv::rectangle(frame, tracker.box, cv::Scalar(0, 255, 0));
+        }
     }
 }
 
