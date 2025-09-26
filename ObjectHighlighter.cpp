@@ -89,6 +89,8 @@ void ObjectHighlighter::saveVideoWithHighlightsParallel(const std::string &outpu
 {
     auto start = std::chrono::high_resolution_clock::now();
 
+    double currentPos = mCap.get(cv::CAP_PROP_POS_FRAMES);
+
     mReadingFinished = false;
     mProcessingFinished = false;
     mInputFrames = {};
@@ -99,6 +101,8 @@ void ObjectHighlighter::saveVideoWithHighlightsParallel(const std::string &outpu
         std::jthread processorThread(&ObjectHighlighter::drawHighlights, this);
         std::jthread writerThread(&ObjectHighlighter::writeFrames, this, outputPath, format);
     }
+
+    mCap.set(cv::CAP_PROP_POS_FRAMES, currentPos);
 
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration = end - start;
