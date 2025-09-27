@@ -34,19 +34,31 @@ public:
 private:
     struct PlaybackState
     {
-        std::queue<cv::Mat> inputFrames{};
-        std::queue<cv::Mat> processedFrames{};
+        std::queue<cv::Mat> processorFrames{};
+        std::queue<cv::Mat> writerFrames{};
 
-        std::mutex inputMutex;
-        std::mutex processedMutex;
+        std::mutex preProcessorMutex;
+        std::mutex processorMutex;
+        std::mutex writerMutex;
 
-        std::condition_variable inputCv;
-        std::condition_variable processedCv;
+        std::condition_variable preProcessorCv;
+        std::condition_variable processorCv;
+        std::condition_variable writerCv;
 
+        std::atomic<uint64_t> preProcessorGen{0};
+        std::atomic<uint64_t> processorGen{0};
+
+        std::atomic<bool> processingFinished{false};
         std::atomic<bool> readingFinished{false};
         std::atomic<bool> shuttingDown{false};
-        std::atomic<bool> stateInvalid{false};
-        std::atomic<bool> processingFinished{false};
+
+        void requestShutdown()
+        {
+            shuttingDown.store(true, std::memory_order_release);
+            preProcessorCv.notify_all();
+            processorCv.notify_all();
+            writerCv.notify_all();
+        }
     };
 
     struct SaveVideoState
