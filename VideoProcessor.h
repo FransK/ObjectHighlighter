@@ -1,8 +1,9 @@
 #ifndef VIDEO_PROCESSOR
 #define VIDEO_PROCESSOR
 
-#include "opencv2/highgui.hpp"
 #include <string>
+
+#include "opencv2/highgui.hpp"
 
 class VideoProcessor
 {

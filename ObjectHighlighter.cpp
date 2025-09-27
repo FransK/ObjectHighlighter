@@ -1,3 +1,5 @@
+#include "ObjectHighlighter.h"
+
 #include <chrono>
 #include <iostream>
 #include <thread>
@@ -5,8 +7,6 @@
 #include "opencv2/features2d.hpp"
 #include "opencv2/imgproc.hpp"
 #include "opencv2/tracking.hpp"
-
-#include "ObjectHighlighter.h"
 
 using std::cout;
 using std::endl;

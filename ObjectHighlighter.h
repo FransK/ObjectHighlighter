@@ -3,12 +3,12 @@
 
 #include "VideoProcessor.h"
 
-#include "opencv2/tracking.hpp"
-
 #include <condition_variable>
 #include <mutex>
 #include <queue>
 #include <vector>
+
+#include "opencv2/tracking.hpp"
 
 class ObjectHighlighter : public VideoProcessor
 {

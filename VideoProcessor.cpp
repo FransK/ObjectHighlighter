@@ -1,7 +1,7 @@
+#include "VideoProcessor.h"
+
 #include <algorithm>
 #include <iostream>
-
-#include "VideoProcessor.h"
 
 using std::cout;
 using std::endl;
