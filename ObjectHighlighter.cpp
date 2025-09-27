@@ -61,28 +61,6 @@ void ObjectHighlighter::playVideo()
         std::jthread writerThread(&ObjectHighlighter::drawFrames, this, std::ref(state));
     }
 
-    // uint currentFrame = 0;
-    // auto iter = mHighlights.begin();
-
-    // cv::Mat frame;
-    // while (mCap.read(frame))
-    // {
-    //     drawHighlightsOnFrame(frame, currentFrame, iter);
-    //     trackOnFrame(frame);
-
-    //     cv::imshow("Video", frame);
-
-    //     int key = cv::waitKey(1);
-
-    //     if (!handlePlaybackInput(key, frame, currentFrame, iter))
-    //     {
-    //         break;
-    //     }
-
-    //     // Update currentFrame to next frame
-    //     currentFrame = static_cast<uint>(mCap.get(cv::CAP_PROP_POS_FRAMES));
-    // }
-
     cv::destroyAllWindows();
 }
 
@@ -346,7 +324,7 @@ void ObjectHighlighter::trackOnFrame(cv::Mat &frame)
     }
 
     // Draw all highlights for the current frame
-    for (auto tracker : mTrackers)
+    for (auto &tracker : mTrackers)
     {
         if (tracker.tracker->update(frame, tracker.box))
         {
@@ -402,26 +380,26 @@ void ObjectHighlighter::readFrames(ObjectHighlighter::SaveVideoState &state)
 
 void ObjectHighlighter::drawHighlights(ObjectHighlighter::SaveVideoState &state)
 {
-    if (!mHighlights.empty())
+    auto iter = mHighlights.begin();
+    uint framec = 0;
+
+    while (true)
     {
-        auto iter = mHighlights.begin();
-        uint framec = 0;
+        std::unique_lock inputLock(state.inputMutex);
+        state.inputCv.wait(inputLock, [&]
+                           { return !state.inputFrames.empty() || state.readingFinished; });
 
-        while (true)
+        if (state.inputFrames.empty() && state.readingFinished)
         {
-            std::unique_lock inputLock(state.inputMutex);
-            state.inputCv.wait(inputLock, [&]
-                               { return !state.inputFrames.empty() || state.readingFinished; });
+            break;
+        }
 
-            if (state.inputFrames.empty() && state.readingFinished)
-            {
-                break;
-            }
+        cv::Mat frame = state.inputFrames.front();
+        state.inputFrames.pop();
+        inputLock.unlock();
 
-            cv::Mat frame = state.inputFrames.front();
-            state.inputFrames.pop();
-            inputLock.unlock();
-
+        if (!mHighlights.empty())
+        {
             while (iter != mHighlights.end() && iter->frame < framec)
             {
                 ++iter;
@@ -431,37 +409,15 @@ void ObjectHighlighter::drawHighlights(ObjectHighlighter::SaveVideoState &state)
                 cv::rectangle(frame, iter->box, cv::Scalar(0, 255, 0));
                 ++iter;
             }
-
-            std::unique_lock processedLock(state.processedMutex);
-            state.processedFrames.push(frame);
-            processedLock.unlock();
-            state.processedCv.notify_one();
-
-            ++framec;
         }
-    }
-    else
-    {
-        while (true)
+
         {
-            std::unique_lock inputLock(state.inputMutex);
-            state.inputCv.wait(inputLock, [&]
-                               { return !state.inputFrames.empty() || state.readingFinished; });
-
-            if (state.inputFrames.empty() && state.readingFinished)
-            {
-                break;
-            }
-
-            cv::Mat frame = state.inputFrames.front();
-            state.inputFrames.pop();
-            inputLock.unlock();
-
-            std::unique_lock processedLock(state.processedMutex);
+            std::lock_guard<std::mutex> processedLock(state.processedMutex);
             state.processedFrames.push(frame);
-            processedLock.unlock();
-            state.processedCv.notify_one();
         }
+        state.processedCv.notify_one();
+
+        ++framec;
     }
 
     state.processingFinished = true;
