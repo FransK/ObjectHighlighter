@@ -26,16 +26,19 @@ public:
     };
 
     ObjectHighlighter() = default;
-    void captureFrameWithHighlights(const std::string &outputPath, const cv::Mat &frame);
-    void objectSelection(cv::Mat &frame);
     void playVideo() override;
+    void selectObjects(cv::Mat &frame);
     void saveVideoWithHighlights(const std::string &outputPath, const std::string &format);
+    void captureFrameWithHighlights(const std::string &outputPath, const cv::Mat &frame);
 
 private:
     struct PlaybackState
     {
-        std::queue<cv::Mat> processorFrames{};
-        std::queue<cv::Mat> writerFrames{};
+        std::atomic<uint64_t> processorGen{0};
+        std::atomic<uint64_t> writerGen{0};
+
+        std::queue<cv::Mat> processorQueue{};
+        std::queue<cv::Mat> writerQueue{};
 
         std::mutex preProcessorMutex;
         std::mutex processorMutex;
@@ -45,16 +48,13 @@ private:
         std::condition_variable processorCv;
         std::condition_variable writerCv;
 
-        std::atomic<uint64_t> preProcessorGen{0};
-        std::atomic<uint64_t> processorGen{0};
-
+        std::atomic<bool> preProcessingFinished{false};
         std::atomic<bool> processingFinished{false};
-        std::atomic<bool> readingFinished{false};
         std::atomic<bool> shuttingDown{false};
 
         void requestShutdown()
         {
-            shuttingDown.store(true, std::memory_order_release);
+            shuttingDown = true;
             preProcessorCv.notify_all();
             processorCv.notify_all();
             writerCv.notify_all();
@@ -63,30 +63,33 @@ private:
 
     struct SaveVideoState
     {
-        std::queue<cv::Mat> inputFrames{};
-        std::queue<cv::Mat> processedFrames{};
+        std::queue<cv::Mat> processorQueue{};
+        std::queue<cv::Mat> writerQueue{};
 
-        std::mutex inputMutex;
-        std::mutex processedMutex;
+        std::mutex processorMutex;
+        std::mutex writerMutex;
 
-        std::condition_variable inputCv;
-        std::condition_variable processedCv;
+        std::condition_variable processorCv;
+        std::condition_variable writerCv;
 
-        std::atomic<bool> readingFinished{false};
+        std::atomic<bool> preProcessingFinished{false};
         std::atomic<bool> processingFinished{false};
     };
 
-    std::vector<Highlight> mHighlights; // TODO Further optimization: Add index into highlights for rewinding
-    std::vector<ObjectTracker> mTrackers;
+    std::vector<Highlight> mHighlights;   // TODO Further optimization: Add index into highlights for rewinding
+    std::vector<ObjectTracker> mTrackers; // Other optimizations: Have trackers running in background
 
+    // Playback pipeline
     void captureFrames(PlaybackState &state);
     void updateTrackers(PlaybackState &state);
     void drawFrames(PlaybackState &state);
 
+    // VideoWriter pipeline
     void readFrames(SaveVideoState &state);
     void drawHighlights(SaveVideoState &state);
     void writeFrames(const std::string &outputPath, const std::string &format, SaveVideoState &state);
 
+    bool handlePlaybackInput(int key, PlaybackState &state, cv::Mat &frame);
     bool handlePlaybackInput(int key, cv::Mat &frame, uint framec, std::vector<Highlight>::iterator &hlIter);
     void drawHighlightsOnFrame(cv::Mat &frame, uint framec, std::vector<Highlight>::iterator &hlIter);
     void trackOnFrame(cv::Mat &frame);
