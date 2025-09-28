@@ -6,6 +6,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <queue>
+#include <stop_token>
 #include <vector>
 
 #include "opencv2/tracking.hpp"
@@ -44,17 +45,18 @@ private:
         std::mutex processorMutex;
         std::mutex writerMutex;
 
-        std::condition_variable preProcessorCv;
-        std::condition_variable processorCv;
-        std::condition_variable writerCv;
+        std::condition_variable_any preProcessorCv;
+        std::condition_variable_any processorCv;
+        std::condition_variable_any writerCv;
 
         std::atomic<bool> preProcessingFinished{false};
         std::atomic<bool> processingFinished{false};
-        std::atomic<bool> shuttingDown{false};
+
+        std::stop_source stopSource;
 
         void requestShutdown()
         {
-            shuttingDown = true;
+            stopSource.request_stop();
             preProcessorCv.notify_all();
             processorCv.notify_all();
             writerCv.notify_all();

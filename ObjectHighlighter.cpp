@@ -19,8 +19,9 @@ void ObjectHighlighter::playVideo()
         return;
     }
 
-    PlaybackState state;
     {
+        PlaybackState state;
+
         std::jthread readerThread(&ObjectHighlighter::captureFrames, this, std::ref(state));
         std::jthread processorThread(&ObjectHighlighter::updateTrackers, this, std::ref(state));
         std::jthread writerThread(&ObjectHighlighter::drawFrames, this, std::ref(state));
@@ -33,14 +34,15 @@ void ObjectHighlighter::captureFrames(PlaybackState &state)
 {
     cv::Mat frame;
     uint64_t localGen = state.processorGen.load(std::memory_order_acquire);
+    std::stop_token st = state.stopSource.get_token();
 
-    while (!state.shuttingDown.load(std::memory_order_acquire))
+    while (!st.stop_requested())
     {
         uint64_t newGen = state.processorGen.load(std::memory_order_acquire);
         if (newGen != localGen)
         {
             {
-                std::lock_guard<std::mutex> lock(state.processorMutex);
+                std::scoped_lock<std::mutex> lock(state.processorMutex);
                 state.preProcessingFinished.store(false, std::memory_order_release);
                 state.processorQueue = {};
             }
@@ -54,13 +56,13 @@ void ObjectHighlighter::captureFrames(PlaybackState &state)
 
         bool ok;
         {
-            std::lock_guard<std::mutex> lock(state.preProcessorMutex);
+            std::scoped_lock<std::mutex> lock(state.preProcessorMutex);
             ok = mCap.read(frame);
         }
         if (ok)
         {
             {
-                std::lock_guard<std::mutex> lock(state.processorMutex);
+                std::scoped_lock<std::mutex> lock(state.processorMutex);
                 state.processorQueue.push(frame.clone());
             }
 
@@ -75,8 +77,8 @@ void ObjectHighlighter::captureFrames(PlaybackState &state)
 
             // Pause until either shut down or invalidation
             std::unique_lock lock(state.preProcessorMutex);
-            state.preProcessorCv.wait(lock, [&]
-                                      { return state.processorGen != localGen || state.shuttingDown; });
+            state.preProcessorCv.wait(lock, st, [&]
+                                      { return state.processorGen != localGen; });
 
             lock.unlock();
         }
@@ -86,19 +88,20 @@ void ObjectHighlighter::captureFrames(PlaybackState &state)
 
 void ObjectHighlighter::updateTrackers(PlaybackState &state)
 {
-    uint64_t localGen = state.writerGen; // acquire semantics
+    // atomics use acquire semantics on read and release semantics on write
+    uint64_t localGen = state.writerGen;
+    std::stop_token st = state.stopSource.get_token();
 
-    while (!state.shuttingDown)
+    while (!st.stop_requested())
     {
-        while (!state.shuttingDown)
+        while (!st.stop_requested())
         {
             std::unique_lock inputLock(state.processorMutex);
-            state.processorCv.wait(inputLock, [&]
+            state.processorCv.wait(inputLock, st, [&]
                                    { return !state.processorQueue.empty() ||
-                                            state.preProcessingFinished ||
-                                            state.shuttingDown; });
+                                            state.preProcessingFinished; });
 
-            if (state.shuttingDown)
+            if (st.stop_requested())
             {
                 cout << "update thread exiting." << endl;
                 return; // return will release state.shuttingDown
@@ -116,7 +119,7 @@ void ObjectHighlighter::updateTrackers(PlaybackState &state)
             if (newGen != localGen)
             {
                 {
-                    std::lock_guard<std::mutex> lock(state.writerMutex);
+                    std::scoped_lock<std::mutex> lock(state.writerMutex);
                     state.processingFinished.store(false, std::memory_order_release);
                     state.writerQueue = {};
                 }
@@ -130,21 +133,21 @@ void ObjectHighlighter::updateTrackers(PlaybackState &state)
             trackOnFrame(frame);
 
             {
-                std::lock_guard<std::mutex> lock(state.writerMutex);
+                std::scoped_lock<std::mutex> lock(state.writerMutex);
                 state.writerQueue.push(frame);
             }
             state.writerCv.notify_one();
         }
 
-        if (state.shuttingDown)
+        // Pause until either shut down or invalidation
+        std::unique_lock outputLock(state.processorMutex);
+        state.processorCv.wait(outputLock, st, [&]
+                               { return state.writerGen != localGen; });
+
+        if (st.stop_requested())
         {
             break;
         }
-
-        // Pause until either shut down or invalidation
-        std::unique_lock outputLock(state.processorMutex);
-        state.processorCv.wait(outputLock, [&]
-                               { return state.writerGen != localGen || state.shuttingDown; });
 
         uint64_t newGen = state.writerGen.load(std::memory_order_acquire);
         if (newGen != localGen)
@@ -164,15 +167,19 @@ void ObjectHighlighter::updateTrackers(PlaybackState &state)
 
 void ObjectHighlighter::drawFrames(PlaybackState &state)
 {
-    while (!state.shuttingDown.load(std::memory_order_acquire))
+    // The final process in the pipeline
+    // This will run until everything before it is complete and it is
+    // complete itself OR it handles a stop request from the user
+    std::stop_token st = state.stopSource.get_token();
+
+    while (!st.stop_requested())
     {
         std::unique_lock lock(state.writerMutex);
         state.writerCv.wait(lock, [&]
                             { return !state.writerQueue.empty() ||
-                                     state.processingFinished ||
-                                     state.shuttingDown; });
+                                     state.processingFinished; });
 
-        if (state.shuttingDown)
+        if (st.stop_requested())
         {
             break;
         }
@@ -192,6 +199,7 @@ void ObjectHighlighter::drawFrames(PlaybackState &state)
         int key = cv::waitKey(1);
         if (!handlePlaybackInput(key, state, frame))
         {
+            state.requestShutdown();
             break;
         }
     }
@@ -257,7 +265,7 @@ bool ObjectHighlighter::handlePlaybackInput(int key, ObjectHighlighter::Playback
     if (key == 'p')
     {
         {
-            std::lock_guard<std::mutex> preLock(state.preProcessorMutex);
+            std::scoped_lock<std::mutex> preLock(state.preProcessorMutex);
             selectObjects(frame);
         }
         state.processorGen.fetch_add(1, std::memory_order_acquire);
@@ -265,13 +273,12 @@ bool ObjectHighlighter::handlePlaybackInput(int key, ObjectHighlighter::Playback
     }
     else if (key == 'q')
     {
-        state.requestShutdown();
         return false;
     }
     else if (key == 'r')
     {
         {
-            std::lock_guard<std::mutex> lock(state.preProcessorMutex);
+            std::scoped_lock<std::mutex> lock(state.preProcessorMutex);
             rewindVideo(-1);
         }
         state.processorGen.fetch_add(1, std::memory_order_acquire);
@@ -378,9 +385,10 @@ void ObjectHighlighter::readFrames(ObjectHighlighter::SaveVideoState &state)
     cv::Mat frame;
     while (mCap.read(frame))
     {
-        std::unique_lock lock(state.processorMutex);
-        state.processorQueue.push(frame.clone());
-        lock.unlock();
+        {
+            std::scoped_lock<std::mutex> processorLock(state.processorMutex);
+            state.processorQueue.push(frame.clone());
+        }
         state.processorCv.notify_one();
     }
 
@@ -395,8 +403,8 @@ void ObjectHighlighter::drawHighlights(ObjectHighlighter::SaveVideoState &state)
 
     while (true)
     {
-        std::unique_lock inputLock(state.processorMutex);
-        state.processorCv.wait(inputLock, [&]
+        std::unique_lock processorLock(state.processorMutex);
+        state.processorCv.wait(processorLock, [&]
                                { return !state.processorQueue.empty() || state.preProcessingFinished; });
 
         if (state.processorQueue.empty() && state.preProcessingFinished)
@@ -406,7 +414,7 @@ void ObjectHighlighter::drawHighlights(ObjectHighlighter::SaveVideoState &state)
 
         cv::Mat frame = state.processorQueue.front();
         state.processorQueue.pop();
-        inputLock.unlock();
+        processorLock.unlock();
 
         if (!mHighlights.empty())
         {
@@ -422,7 +430,7 @@ void ObjectHighlighter::drawHighlights(ObjectHighlighter::SaveVideoState &state)
         }
 
         {
-            std::lock_guard<std::mutex> processedLock(state.writerMutex);
+            std::scoped_lock<std::mutex> processedLock(state.writerMutex);
             state.writerQueue.push(frame);
         }
         state.writerCv.notify_one();
@@ -449,8 +457,8 @@ void ObjectHighlighter::writeFrames(const std::string &outputPath, const std::st
 
     while (true)
     {
-        std::unique_lock lock(state.writerMutex);
-        state.writerCv.wait(lock, [&]
+        std::unique_lock writerLock(state.writerMutex);
+        state.writerCv.wait(writerLock, [&]
                             { return !state.writerQueue.empty() || state.processingFinished; });
 
         if (state.writerQueue.empty() && state.processingFinished)
@@ -460,7 +468,7 @@ void ObjectHighlighter::writeFrames(const std::string &outputPath, const std::st
 
         cv::Mat frame = state.writerQueue.front();
         state.writerQueue.pop();
-        lock.unlock();
+        writerLock.unlock();
 
         writer.write(frame);
     }
