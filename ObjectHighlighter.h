@@ -1,6 +1,7 @@
 #ifndef OBJECT_HIGHLIGHTER
 #define OBJECT_HIGHLIGHTER
 
+#include "ThreadSafeQ.h"
 #include "VideoProcessor.h"
 
 #include <condition_variable>
@@ -11,9 +12,17 @@
 
 #include "opencv2/tracking.hpp"
 
+static const std::string sWindowTitle{"Video"};
+
 class ObjectHighlighter : public VideoProcessor
 {
 public:
+    struct Frame
+    {
+        int idx;
+        cv::Mat frame;
+    };
+
     struct Highlight
     {
         uint frame;
@@ -28,7 +37,7 @@ public:
 
     ObjectHighlighter() = default;
     void playVideo() override;
-    void selectObjects(cv::Mat &frame);
+    void selectObjects(Frame &frame);
     void saveVideoWithHighlights(const std::string &outputPath, const std::string &format);
     void captureFrameWithHighlights(const std::string &outputPath, const cv::Mat &frame);
 
@@ -36,31 +45,15 @@ private:
     struct PlaybackState
     {
         std::atomic<uint64_t> processorGen{0};
-        std::atomic<uint64_t> writerGen{0};
+        std::atomic<bool> trackerInvalid{false};
 
-        std::queue<cv::Mat> processorQueue{};
-        std::queue<cv::Mat> writerQueue{};
+        ThreadSafeQ<Frame> processorQueue{};
+        ThreadSafeQ<Frame> writerQueue{};
 
-        std::mutex preProcessorMutex;
-        std::mutex processorMutex;
-        std::mutex writerMutex;
-
-        std::condition_variable_any preProcessorCv;
-        std::condition_variable_any processorCv;
-        std::condition_variable_any writerCv;
-
-        std::atomic<bool> preProcessingFinished{false};
-        std::atomic<bool> processingFinished{false};
+        std::mutex capMutex;
+        std::mutex trackersMutex;
 
         std::stop_source stopSource;
-
-        void requestShutdown()
-        {
-            stopSource.request_stop();
-            preProcessorCv.notify_all();
-            processorCv.notify_all();
-            writerCv.notify_all();
-        }
     };
 
     struct SaveVideoState
@@ -91,10 +84,9 @@ private:
     void drawHighlights(SaveVideoState &state);
     void writeFrames(const std::string &outputPath, const std::string &format, SaveVideoState &state);
 
-    bool handlePlaybackInput(int key, PlaybackState &state, cv::Mat &frame);
-    bool handlePlaybackInput(int key, cv::Mat &frame, uint framec, std::vector<Highlight>::iterator &hlIter);
+    bool handlePlaybackInput(int key, PlaybackState &state, Frame &myFrame);
     void drawHighlightsOnFrame(cv::Mat &frame, uint framec, std::vector<Highlight>::iterator &hlIter);
-    void trackOnFrame(cv::Mat &frame);
+    void trackOnFrame(Frame &frame);
 };
 
 #endif
