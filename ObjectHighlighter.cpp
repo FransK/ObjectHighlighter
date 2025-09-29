@@ -105,14 +105,20 @@ void ObjectHighlighter::updateTrackers(PlaybackState &state)
         // Check to see if done processing
         if (myFrame.idx != -1)
         {
+            auto start = std::chrono::high_resolution_clock::now();
             // Lock to prevent adding new trackers while iterating trackers
             std::scoped_lock lock(state.trackersMutex);
             if (state.trackerInvalid)
             {
+                // Discard invalid trackers if we've added new ones
                 state.trackerInvalid = false;
                 continue;
             }
             trackOnFrame(myFrame);
+
+            auto end = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double> duration = end - start;
+            cout << "Tracking time: " << duration.count() << "s" << endl;
         }
 
         state.writerQueue.push(myFrame, state.stopSource.get_token());
@@ -146,7 +152,7 @@ void ObjectHighlighter::drawFrames(PlaybackState &state)
         }
 
         // Displays the video to the user
-        cout << "****Showing frame: " << myFrame.idx << endl;
+        // cout << "****Showing frame: " << myFrame.idx << endl;
         cv::imshow(sWindowTitle, myFrame.frame);
 
         int key = cv::waitKey(1);
@@ -170,7 +176,7 @@ void ObjectHighlighter::selectObjects(Frame &myFrame)
     }
 
     std::vector<cv::Rect> boundingBoxes;
-    cout << "Selecting on frame: " << myFrame.idx << endl;
+    // cout << "Selecting on frame: " << myFrame.idx << endl;
     cv::selectROIs("Video", myFrame.frame, boundingBoxes);
 
     for (auto bbox : boundingBoxes)
@@ -210,13 +216,13 @@ bool ObjectHighlighter::handlePlaybackInput(int key, ObjectHighlighter::Playback
             selectObjects(myFrame);
             state.writerQueue.clear();
             state.trackerInvalid = true;
-            cout << "Writer queue cleared." << endl;
+            // cout << "Writer queue cleared." << endl;
             // Rewind to the current frame and throw out the items from the queues
             // This may rewind BEFORE the myFrame.idx. That is okay.
-            cout << "Cap mutex acquired." << endl;
+            // cout << "Cap mutex acquired." << endl;
             mCap.set(cv::CAP_PROP_POS_FRAMES, myFrame.idx);
             state.processorQueue.clear();
-            cout << "Processor queue cleared." << endl;
+            // cout << "Processor queue cleared." << endl;
         }
         // If the reader had finished, need to notify to wake
         state.processorGen += 1;

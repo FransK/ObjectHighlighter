@@ -3,3 +3,5 @@ build/
 *.jpg
 *.pdf
 output*
+*.out*
+*profile*

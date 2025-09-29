@@ -1,6 +1,7 @@
 # Set the C++ version to the one we are using and -Wall -O2 for production
 CXXFLAGS := -std=c++20 -Wall -O2
-DEBUGFLAGS := -S -fverbose-asm
+ASMFLAGS := -S -fverbose-asm
+PROFILEFLAGS := -pg -fno-omit-frame-pointer
 
 # Use pkg-config to find the opencv directories
 OPENCV_CFLAGS := $(shell pkg-config --cflags opencv4)
@@ -24,5 +25,8 @@ $(TARGET): $(SRC)
 clean:
 	rm -f $(BUILD_DIR)/$(TARGET)
 
+profile: $(SRC)
+	$(CXX) $(CXXFLAGS) $(PROFILEFLAGS) -o $(BUILD_DIR)/$@ $^ $(LDFLAGS)
+
 asm: ObjectHighlighter.cpp
-	$(CXX) $(CXXFLAGS) $(DEBUGFLAGS) -o ./build/ObjectHighlighter.s ObjectHighlighter.cpp
+	$(CXX) $(CXXFLAGS) $(ASMFLAGS) -o $(BUILD_DIR)/ObjectHighlighter.s ObjectHighlighter.cpp
