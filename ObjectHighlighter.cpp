@@ -105,7 +105,6 @@ void ObjectHighlighter::updateTrackers(PlaybackState &state)
         // Check to see if done processing
         if (myFrame.idx != -1)
         {
-            auto start = std::chrono::high_resolution_clock::now();
             // Lock to prevent adding new trackers while iterating trackers
             std::scoped_lock lock(state.trackersMutex);
             if (state.trackerInvalid)
@@ -114,6 +113,9 @@ void ObjectHighlighter::updateTrackers(PlaybackState &state)
                 state.trackerInvalid = false;
                 continue;
             }
+
+            auto start = std::chrono::high_resolution_clock::now();
+
             trackOnFrame(myFrame);
 
             auto end = std::chrono::high_resolution_clock::now();
