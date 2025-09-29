@@ -56,21 +56,6 @@ private:
         std::stop_source stopSource;
     };
 
-    struct SaveVideoState
-    {
-        std::queue<cv::Mat> processorQueue{};
-        std::queue<cv::Mat> writerQueue{};
-
-        std::mutex processorMutex;
-        std::mutex writerMutex;
-
-        std::condition_variable processorCv;
-        std::condition_variable writerCv;
-
-        std::atomic<bool> preProcessingFinished{false};
-        std::atomic<bool> processingFinished{false};
-    };
-
     std::vector<Highlight> mHighlights;   // TODO Further optimization: Add index into highlights for rewinding
     std::vector<ObjectTracker> mTrackers; // Other optimizations: Have trackers running in background
 
@@ -80,9 +65,9 @@ private:
     void drawFrames(PlaybackState &state);
 
     // VideoWriter pipeline
-    void readFrames(SaveVideoState &state);
-    void drawHighlights(SaveVideoState &state);
-    void writeFrames(const std::string &outputPath, const std::string &format, SaveVideoState &state);
+    void readFrames(PlaybackState &state);
+    void drawHighlights(PlaybackState &state);
+    void writeFrames(const std::string &outputPath, const std::string &format, PlaybackState &state);
 
     bool handlePlaybackInput(int key, PlaybackState &state, Frame &myFrame);
     void drawHighlightsOnFrame(cv::Mat &frame, uint framec, std::vector<Highlight>::iterator &hlIter);

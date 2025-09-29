@@ -296,13 +296,14 @@ void ObjectHighlighter::saveVideoWithHighlights(const std::string &outputPath, c
 
     double currentPos = mCap.get(cv::CAP_PROP_POS_FRAMES);
 
-    SaveVideoState saveState;
+    mCap.set(cv::CAP_PROP_POS_FRAMES, 0);
 
-    // Scope for multi-threaded pipeline
     {
-        std::jthread readerThread(&ObjectHighlighter::readFrames, this, std::ref(saveState));
-        std::jthread processorThread(&ObjectHighlighter::drawHighlights, this, std::ref(saveState));
-        std::jthread writerThread(&ObjectHighlighter::writeFrames, this, outputPath, format, std::ref(saveState));
+        PlaybackState state;
+
+        std::jthread readerThread(&ObjectHighlighter::readFrames, this, std::ref(state));
+        std::jthread processorThread(&ObjectHighlighter::drawHighlights, this, std::ref(state));
+        std::jthread writerThread(&ObjectHighlighter::writeFrames, this, outputPath, format, std::ref(state));
     }
 
     mCap.set(cv::CAP_PROP_POS_FRAMES, currentPos);
@@ -312,8 +313,9 @@ void ObjectHighlighter::saveVideoWithHighlights(const std::string &outputPath, c
     cout << "Save video time: " << duration.count() << "s" << endl;
 }
 
-void ObjectHighlighter::readFrames(ObjectHighlighter::SaveVideoState &state)
+void ObjectHighlighter::readFrames(ObjectHighlighter::PlaybackState &state)
 {
+    cout << "starting save read" << endl;
     if (!mCap.isOpened())
     {
         cout << "No video loaded." << endl;
@@ -322,68 +324,55 @@ void ObjectHighlighter::readFrames(ObjectHighlighter::SaveVideoState &state)
 
     mCap.set(cv::CAP_PROP_POS_FRAMES, 0);
 
-    cv::Mat frame;
-    while (mCap.read(frame))
+    Frame myFrame;
+    std::stop_token st = state.stopSource.get_token();
+    while (!st.stop_requested() && mCap.read(myFrame.frame))
     {
-        {
-            std::scoped_lock processorLock(state.processorMutex);
-            state.processorQueue.push(frame.clone());
-        }
-        state.processorCv.notify_one();
+        myFrame.idx = mCap.get(cv::CAP_PROP_POS_FRAMES);
+        state.processorQueue.push(myFrame, st);
     }
 
-    state.preProcessingFinished = true;
-    state.processorCv.notify_all();
+    // Push an empty frame to indicate completion
+    myFrame.idx = -1;
+    myFrame.frame = cv::Mat();
+    state.processorQueue.push(myFrame, st);
 }
 
-void ObjectHighlighter::drawHighlights(ObjectHighlighter::SaveVideoState &state)
+void ObjectHighlighter::drawHighlights(ObjectHighlighter::PlaybackState &state)
 {
-    auto iter = mHighlights.begin();
-    uint framec = 0;
+    cout << "starting save highlights" << endl;
 
-    while (true)
+    std::stop_token st = state.stopSource.get_token();
+
+    while (!st.stop_requested())
     {
-        std::unique_lock processorLock(state.processorMutex);
-        state.processorCv.wait(processorLock, [&]
-                               { return !state.processorQueue.empty() || state.preProcessingFinished; });
+        std::optional<Frame> myFrameOpt = state.processorQueue.waitAndPop(st);
 
-        if (state.processorQueue.empty() && state.preProcessingFinished)
+        if (!myFrameOpt.has_value())
         {
             break;
         }
 
-        cv::Mat frame = state.processorQueue.front();
-        state.processorQueue.pop();
-        processorLock.unlock();
+        Frame myFrame = std::move(*myFrameOpt);
 
-        if (!mHighlights.empty())
+        // Check to see if done processing
+        if (myFrame.idx != -1)
         {
-            while (iter != mHighlights.end() && iter->frame < framec)
-            {
-                ++iter;
-            }
-            while (iter != mHighlights.end() && iter->frame == framec)
-            {
-                cv::rectangle(frame, iter->box, cv::Scalar(0, 255, 0));
-                ++iter;
-            }
+            trackOnFrame(myFrame);
+            state.writerQueue.push(myFrame, state.stopSource.get_token());
         }
-
+        else
         {
-            std::scoped_lock processedLock(state.writerMutex);
-            state.writerQueue.push(frame);
+            state.writerQueue.push(myFrame, state.stopSource.get_token());
+            break;
         }
-        state.writerCv.notify_one();
-
-        ++framec;
     }
-
-    state.processingFinished = true;
-    state.writerCv.notify_all();
 }
 
-void ObjectHighlighter::writeFrames(const std::string &outputPath, const std::string &format, ObjectHighlighter::SaveVideoState &state)
+void ObjectHighlighter::writeFrames(const std::string &outputPath, const std::string &format, ObjectHighlighter::PlaybackState &state)
 {
+    cout << "starting save write" << endl;
+
     cv::VideoWriter writer = cv::VideoWriter(outputPath,
                                              cv::VideoWriter::fourcc('m', 'p', '4', 'v'),
                                              mCap.get(cv::CAP_PROP_FPS),
@@ -395,22 +384,25 @@ void ObjectHighlighter::writeFrames(const std::string &outputPath, const std::st
         return;
     }
 
-    while (true)
+    while (!state.stopSource.stop_requested())
     {
-        std::unique_lock writerLock(state.writerMutex);
-        state.writerCv.wait(writerLock, [&]
-                            { return !state.writerQueue.empty() || state.processingFinished; });
+        std::optional<Frame> myFrameOpt = state.writerQueue.waitAndPop(state.stopSource.get_token());
 
-        if (state.writerQueue.empty() && state.processingFinished)
+        if (!myFrameOpt.has_value())
         {
+            // Stop requested
             break;
         }
 
-        cv::Mat frame = state.writerQueue.front();
-        state.writerQueue.pop();
-        writerLock.unlock();
+        Frame myFrame = std::move(*myFrameOpt);
 
-        writer.write(frame);
+        if (myFrame.idx == -1)
+        {
+            // Last frame already displayed, terminate
+            break;
+        }
+
+        writer.write(myFrame.frame);
     }
 }
 
