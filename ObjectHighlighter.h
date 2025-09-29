@@ -70,7 +70,6 @@ private:
     void writeFrames(const std::string &outputPath, const std::string &format, PlaybackState &state);
 
     bool handlePlaybackInput(int key, PlaybackState &state, Frame &myFrame);
-    void drawHighlightsOnFrame(cv::Mat &frame, uint framec, std::vector<Highlight>::iterator &hlIter);
     void trackOnFrame(Frame &frame);
 };
 

@@ -175,11 +175,6 @@ void ObjectHighlighter::selectObjects(Frame &myFrame)
 
     for (auto bbox : boundingBoxes)
     {
-        Highlight hl;
-        hl.frame = myFrame.idx;
-        hl.box = bbox;
-        mHighlights.push_back(hl);
-
         ObjectTracker ot;
         cv::Ptr<cv::Tracker> tracker = cv::TrackerKCF::create();
         tracker->init(myFrame.frame, bbox);
@@ -187,10 +182,6 @@ void ObjectHighlighter::selectObjects(Frame &myFrame)
         ot.tracker = tracker;
         mTrackers.push_back(ot);
     }
-
-    // Sort highlights by frame number
-    std::sort(mHighlights.begin(), mHighlights.end(), [](Highlight a, Highlight b)
-              { return a.frame < b.frame; });
 }
 
 void ObjectHighlighter::trackOnFrame(Frame &myFrame)
@@ -268,26 +259,6 @@ bool ObjectHighlighter::handlePlaybackInput(int key, ObjectHighlighter::Playback
     }
 
     return true;
-}
-
-void ObjectHighlighter::drawHighlightsOnFrame(cv::Mat &frame, uint framec, std::vector<Highlight>::iterator &iter)
-{
-    if (mHighlights.empty())
-    {
-        return;
-    }
-
-    // Advance iterator to the current frame
-    while (iter != mHighlights.end() && iter->frame < framec)
-    {
-        ++iter;
-    }
-    // Draw all highlights for the current frame
-    while (iter != mHighlights.end() && iter->frame == framec)
-    {
-        cv::rectangle(frame, iter->box, cv::Scalar(0, 255, 0));
-        ++iter;
-    }
 }
 
 void ObjectHighlighter::saveVideoWithHighlights(const std::string &outputPath, const std::string &format)
