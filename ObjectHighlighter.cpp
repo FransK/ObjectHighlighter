@@ -49,16 +49,20 @@ void ObjectHighlighter::captureFrames(PlaybackState &state)
             ok = mCap.read(myFrame.frame);
             if (ok)
             {
+                // Get the index before releasing cap
                 myFrame.idx = mCap.get(cv::CAP_PROP_POS_FRAMES) - 1;
-                state.processorQueue.push(myFrame);
             }
         }
-        if (!ok)
+        if (ok)
+        {
+            state.processorQueue.push(myFrame, state.stopSource.get_token());
+        }
+        else
         {
             // Last frame to indicate reading done
             myFrame.idx = -1;
             myFrame.frame = cv::Mat();
-            state.processorQueue.push(myFrame);
+            state.processorQueue.push(myFrame, state.stopSource.get_token());
 
             cout << "Finished capturing frames." << endl;
 
@@ -111,8 +115,7 @@ void ObjectHighlighter::updateTrackers(PlaybackState &state)
             trackOnFrame(myFrame);
         }
 
-        // cout << "Tracked frame: " << myFrame.idx << endl;
-        state.writerQueue.push(myFrame);
+        state.writerQueue.push(myFrame, state.stopSource.get_token());
     }
 
     cout << "update thread exiting." << endl;
@@ -212,17 +215,17 @@ bool ObjectHighlighter::handlePlaybackInput(int key, ObjectHighlighter::Playback
     if (key == 'p')
     {
         {
-            std::scoped_lock lock(state.trackersMutex);
+            std::scoped_lock lock(state.capMutex, state.trackersMutex);
             selectObjects(myFrame);
             state.writerQueue.clear();
             state.trackerInvalid = true;
-            {
-                // Rewind to the current frame and throw out the items from the queues
-                // This may rewind BEFORE the myFrame.idx. That is okay.
-                std::scoped_lock lock(state.capMutex);
-                mCap.set(cv::CAP_PROP_POS_FRAMES, myFrame.idx);
-                state.processorQueue.clear();
-            }
+            cout << "Writer queue cleared." << endl;
+            // Rewind to the current frame and throw out the items from the queues
+            // This may rewind BEFORE the myFrame.idx. That is okay.
+            cout << "Cap mutex acquired." << endl;
+            mCap.set(cv::CAP_PROP_POS_FRAMES, myFrame.idx);
+            state.processorQueue.clear();
+            cout << "Processor queue cleared." << endl;
         }
         // If the reader had finished, need to notify to wake
         state.processorGen += 1;

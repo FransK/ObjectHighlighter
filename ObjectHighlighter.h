@@ -47,8 +47,8 @@ private:
         std::atomic<uint64_t> processorGen{0};
         std::atomic<bool> trackerInvalid{false};
 
-        ThreadSafeQ<Frame> processorQueue{};
-        ThreadSafeQ<Frame> writerQueue{};
+        ThreadSafeQ<Frame> processorQueue{8};
+        ThreadSafeQ<Frame> writerQueue{8};
 
         std::mutex capMutex;
         std::mutex trackersMutex;
