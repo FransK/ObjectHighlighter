@@ -50,14 +50,15 @@ private:
         ThreadSafeQ<Frame> processorQueue{8};
         ThreadSafeQ<Frame> writerQueue{8};
 
-        std::mutex capMutex;
-        std::mutex trackersMutex;
-
         std::stop_source stopSource;
     };
 
     std::vector<Highlight> mHighlights;   // TODO Further optimization: Add index into highlights for rewinding
     std::vector<ObjectTracker> mTrackers; // Other optimizations: Have trackers running in background
+
+    // Class member mutexes
+    std::mutex mCapMutex;
+    std::mutex mTrackersMutex;
 
     // Playback pipeline
     void captureFrames(PlaybackState &state);

@@ -45,7 +45,7 @@ void ObjectHighlighter::captureFrames(PlaybackState &state)
         bool ok;
         {
             // lock the VideoCapture object when reading or changing position
-            std::scoped_lock lock(state.capMutex);
+            std::scoped_lock lock(mCapMutex);
             ok = mCap.read(myFrame.frame);
             if (ok)
             {
@@ -106,7 +106,7 @@ void ObjectHighlighter::updateTrackers(PlaybackState &state)
         if (myFrame.idx != -1)
         {
             // Lock to prevent adding new trackers while iterating trackers
-            std::scoped_lock lock(state.trackersMutex);
+            std::scoped_lock lock(mTrackersMutex);
             if (state.trackerInvalid)
             {
                 // Discard invalid trackers if we've added new ones
@@ -214,7 +214,7 @@ bool ObjectHighlighter::handlePlaybackInput(int key, ObjectHighlighter::Playback
     if (key == 'p')
     {
         {
-            std::scoped_lock lock(state.capMutex, state.trackersMutex);
+            std::scoped_lock lock(mCapMutex, mTrackersMutex);
             selectObjects(myFrame);
             state.writerQueue.clear();
             state.trackerInvalid = true;
@@ -237,7 +237,7 @@ bool ObjectHighlighter::handlePlaybackInput(int key, ObjectHighlighter::Playback
     else if (key == 'r')
     {
         {
-            std::scoped_lock lock(state.capMutex);
+            std::scoped_lock lock(mCapMutex);
             rewindVideo(-1);
             state.processorQueue.clear();
             state.writerQueue.clear();
@@ -249,7 +249,7 @@ bool ObjectHighlighter::handlePlaybackInput(int key, ObjectHighlighter::Playback
     else if (key == 'z')
     {
         {
-            std::scoped_lock lock(state.capMutex);
+            std::scoped_lock lock(mCapMutex);
             rewindVideo(290);
             state.processorQueue.clear();
             state.writerQueue.clear();
@@ -261,7 +261,7 @@ bool ObjectHighlighter::handlePlaybackInput(int key, ObjectHighlighter::Playback
     else if (key == 's')
     {
         cout << "Saving video." << endl;
-        std::scoped_lock lock(state.capMutex, state.trackersMutex);
+        std::scoped_lock lock(mCapMutex, mTrackersMutex);
         saveVideoWithHighlights("output.mp4", "ignored");
         cout << "Video saved." << endl;
     }
