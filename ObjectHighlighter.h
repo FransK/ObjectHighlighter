@@ -27,8 +27,6 @@ private:
     {
         ThreadSafeQ<Frame> processorQueue{8};
         ThreadSafeQ<Frame> writerQueue{8};
-
-        std::stop_source stopSource;
     };
 
     std::string mOutputPath;

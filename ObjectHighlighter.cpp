@@ -1,6 +1,5 @@
 #include "ObjectHighlighter.h"
 
-#include <chrono>
 #include <iostream>
 #include <thread>
 
@@ -41,12 +40,12 @@ void ObjectHighlighter::captureFrames(PlaybackState &state)
     Frame frame;
 
     // Use stop token to exit by user input
-    std::stop_token st = state.stopSource.get_token();
+    std::stop_token st = mControlNode.stopSourceGet().get_token();
 
     while (!st.stop_requested())
     {
         bool ok = mControlNode.capReadAndGet(frame);
-        state.processorQueue.push(frame, state.stopSource.get_token());
+        state.processorQueue.push(frame, mControlNode.stopSourceGet().get_token());
 
         if (ok)
         {
@@ -66,7 +65,7 @@ void ObjectHighlighter::captureFrames(PlaybackState &state)
 void ObjectHighlighter::updateTrackers(PlaybackState &state)
 {
     Frame frame;
-    std::stop_token st = state.stopSource.get_token();
+    std::stop_token st = mControlNode.stopSourceGet().get_token();
 
     while (!st.stop_requested())
     {
@@ -93,7 +92,7 @@ void ObjectHighlighter::updateTrackers(PlaybackState &state)
             }
         }
 
-        state.writerQueue.push(frame, state.stopSource.get_token());
+        state.writerQueue.push(frame, mControlNode.stopSourceGet().get_token());
     }
 
     cout << "update thread exiting." << endl;
@@ -101,7 +100,7 @@ void ObjectHighlighter::updateTrackers(PlaybackState &state)
 
 void ObjectHighlighter::drawFrames(PlaybackState &state)
 {
-    std::stop_token st = state.stopSource.get_token();
+    std::stop_token st = mControlNode.stopSourceGet().get_token();
 
     while (!st.stop_requested())
     {
@@ -141,7 +140,7 @@ void ObjectHighlighter::drawFrames(PlaybackState &state)
         if (frame.idx == -1)
         {
             // We have displayed all the frames, end program
-            state.stopSource.request_stop();
+            mControlNode.stopSourceGet().request_stop();
             cv::waitKey(0);
             mControlNode.capRelease();
             break;
@@ -160,7 +159,7 @@ void ObjectHighlighter::drawFrames(PlaybackState &state)
         int key = cv::waitKey(1);
         if (!handlePlaybackInput(key, state, frame))
         {
-            state.stopSource.request_stop();
+            mControlNode.stopSourceGet().request_stop();
             break;
         }
     }

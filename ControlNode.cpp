@@ -1,5 +1,6 @@
 #include "ControlNode.h"
 
+#include <chrono>
 #include <iostream>
 
 void ControlNode::generationWait(uint32_t value) const
@@ -94,13 +95,22 @@ bool ControlNode::trackersUpdateAndDraw(const Frame &frame)
 
     cv::Mat overlay = frame.image.clone();
 
+    auto currentTime = std::chrono::high_resolution_clock::now();
+
     for (auto &tracker : mTrackers)
     {
-        if (tracker.tracker->update(frame.image, tracker.box))
-        {
-            cv::rectangle(overlay, tracker.box, cv::Scalar(0, 255, 0), cv::FILLED);
-        }
+        mThreadPool.submit([&tracker, &frame, &overlay]
+                           {
+            if (tracker.tracker->update(frame.image, tracker.box))
+            {
+                cv::rectangle(overlay, tracker.box, cv::Scalar(0, 255, 0), cv::FILLED);
+            } });
     }
+
+    mThreadPool.waitAll(std::chrono::milliseconds(100));
+
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - currentTime);
+    std::cout << "Tracking and drawing took " << duration.count() << " microseconds." << std::endl;
 
     const double alpha = 0.30;
     cv::addWeighted(overlay, alpha, frame.image, 1.0 - alpha, 0.0, frame.image);

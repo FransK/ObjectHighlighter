@@ -9,110 +9,69 @@
 class ThreadPool
 {
 private:
-    void doWork()
+    void doWork(std::stop_token st)
     {
         while (!st.stop_requested())
         {
             std::function<void()> job;
             {
-                std::unique_lock lock(mtx);
-                if (!cv.wait(lock, st, [&]
-                             { return !q.empty(); }))
+                std::unique_lock lock(mWorkMutex);
+                if (!mWorkCv.wait(lock, st, [this]
+                                  { return !mWorkQueue.empty(); }))
                 {
                     return;
                 }
-                job = std::move(q.front());
-                q.pop_front();
+
+                job = std::move(mWorkQueue.front());
+                mWorkQueue.pop_front();
             }
+
             job();
+
+            if (mPendingJobs.fetch_sub(1) == 1)
+            {
+                std::scoped_lock lock(mCompletionMutex);
+                mCompletionCv.notify_all();
+            }
         }
     }
 
-    std::deque<std::function<void()>> q;
-    std::vector<std::jthread> workers;
-    std::mutex mtx;
-    std::condition_variable_any cv;
-    std::stop_token st;
+    std::deque<std::function<void()>> mWorkQueue;
+    std::vector<std::jthread> mWorkers;
+    std::mutex mWorkMutex;
+    std::condition_variable_any mWorkCv;
+
+    // Members for waitAll()
+    std::atomic<int> mPendingJobs{0};
+    std::mutex mCompletionMutex;
+    std::condition_variable mCompletionCv;
 
 public:
-    ThreadPool(int n, std::stop_token &st) : st(st)
+    ThreadPool(int n, std::stop_token st)
     {
         for (int i = 0; i < n; ++i)
         {
-            workers.emplace_back([this]
-                                 { doWork(); });
+            mWorkers.emplace_back(&ThreadPool::doWork, this, st);
         }
     }
+
+    ~ThreadPool() = default;
 
     void submit(std::function<void()> job)
     {
+        mPendingJobs.fetch_add(1);
         {
-            std::scoped_lock lock(mtx);
-            q.push_back(std::move(job));
+            std::scoped_lock lock(mWorkMutex);
+            mWorkQueue.push_back(std::move(job));
         }
-        cv.notify_one();
-    }
-};
-
-template <typename T>
-class OrderedEmitter
-{
-private:
-    std::mutex mtx;
-    std::condition_variable_any cv;
-    std::stop_token st;
-    std::map<uint32_t, T> buffer;
-    uint32_t nextSeq;
-    std::atomic<bool> finished{false};
-
-public:
-    OrderedEmitter(std::stop_token &st) : st(st), nextSeq(0) {}
-
-    void submitResult(uint64_t seq, T r)
-    {
-        {
-            std::scoped_lock lock(mtx);
-            buffer.emplace(seq, std::move(r));
-        }
-        cv.notify_one();
+        mWorkCv.notify_one();
     }
 
-    void emitResults(std::function<void(const T &)> consumer)
+    template <typename Rep, typename Period>
+    bool waitAll(const std::chrono::duration<Rep, Period> &timeout)
     {
-        while (!finished)
-        {
-            std::unique_lock lock(mtx);
-            if (!cv.wait(lock, st, [&]
-                         { return buffer.count(nextSeq) > 0 || finished; }))
-            {
-                return;
-            }
-
-            while (true)
-            {
-                auto iter = buffer.find(nextSeq);
-                if (iter == buffer.end())
-                {
-                    break;
-                }
-                consumer(iter->second);
-                buffer.erase(iter);
-                ++nextSeq;
-            }
-        }
-
-        // Add a special case for our current task
-        auto iter = buffer.find(-1);
-        if (iter != buffer.end())
-        {
-            consumer(iter->second);
-            buffer.erase(iter);
-        }
-    }
-
-    void notifyComplete()
-    {
-        finished = true;
-        cv.notify_one();
+        std::unique_lock lock(mCompletionMutex);
+        return mCompletionCv.wait_for(lock, timeout, [this]
+                                      { return mPendingJobs.load() == 0; });
     }
 };

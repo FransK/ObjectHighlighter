@@ -2,6 +2,7 @@
 #define CONTROL_NODE
 
 #include "DataStructs.h"
+#include "ThreadPool.h"
 
 #include <mutex>
 #include <string>
@@ -12,25 +13,34 @@
 class ControlNode
 {
 private:
+    std::stop_source mStopSource;
+
     cv::VideoCapture mCap;
     mutable std::mutex mCapMutex;
 
     std::vector<ObjectTracker> mTrackers;
     mutable std::mutex mTrackersMutex;
 
+    // Frame generation counter
     std::atomic<uint32_t> mGeneration{0};
 
     // Save control
     std::atomic<uint32_t> mSaveState{0};
     uint32_t mReturnIndex{0};
 
+    // Thread pool
+    ThreadPool mThreadPool;
+
 public:
-    ControlNode(cv::VideoCapture cap) : mCap(std::move(cap)) {}
+    ControlNode(cv::VideoCapture cap) : mCap(std::move(cap)), mThreadPool(4, mStopSource.get_token()) {}
     ~ControlNode() = default;
     ControlNode(const ControlNode &) = delete;
     ControlNode &operator=(const ControlNode &) = delete;
     ControlNode(ControlNode &&other) = delete;
     ControlNode &operator=(ControlNode &&other) = delete;
+
+    // Stop source access
+    std::stop_source &stopSourceGet() { return mStopSource; }
 
     // Generation access
     void generationWait(uint32_t value) const;
