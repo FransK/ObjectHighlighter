@@ -92,13 +92,19 @@ bool ControlNode::trackersUpdateAndDraw(const Frame &frame)
         return false;
     }
 
+    cv::Mat overlay = frame.image.clone();
+
     for (auto &tracker : mTrackers)
     {
         if (tracker.tracker->update(frame.image, tracker.box))
         {
-            cv::rectangle(frame.image, tracker.box, cv::Scalar(0, 255, 0));
+            cv::rectangle(overlay, tracker.box, cv::Scalar(0, 255, 0), cv::FILLED);
         }
     }
+
+    const double alpha = 0.30;
+    cv::addWeighted(overlay, alpha, frame.image, 1.0 - alpha, 0.0, frame.image);
+
     return true;
 }
 
