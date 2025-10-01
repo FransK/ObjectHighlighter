@@ -13,7 +13,7 @@
 
 #include "opencv2/tracking.hpp"
 
-static const std::string sWindowTitle{"Video"};
+static const std::string sSaveWindowTitle{"Saving..."};
 
 class ObjectHighlighter : public VideoProcessor
 {

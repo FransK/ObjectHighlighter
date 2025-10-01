@@ -7,6 +7,8 @@
 
 #include "ControlNode.h"
 
+static const std::string sMainTitle = "Video Processor";
+
 class VideoProcessor
 {
 public:

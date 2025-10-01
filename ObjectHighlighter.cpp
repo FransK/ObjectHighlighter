@@ -127,8 +127,12 @@ void ObjectHighlighter::drawFrames(PlaybackState &state)
             {
                 // Finished saving, return to main drawing
                 mControlNode.setIsSaving(0);
+                cv::destroyWindow(sSaveWindowTitle);
                 continue;
             }
+
+            cv::imshow(sSaveWindowTitle, frame.image);
+            cv::waitKey(1);
 
             mVideoWriter.write(frame.image);
             continue;
@@ -150,7 +154,7 @@ void ObjectHighlighter::drawFrames(PlaybackState &state)
         }
 
         // Displays the video to the user
-        cv::imshow(sWindowTitle, frame.image);
+        cv::imshow(sMainTitle, frame.image);
 
         // Allow user to interact with currently shown frame
         int key = cv::waitKey(1);
@@ -161,7 +165,7 @@ void ObjectHighlighter::drawFrames(PlaybackState &state)
         }
     }
 
-    cv::destroyWindow(sWindowTitle);
+    cv::destroyWindow(sMainTitle);
     cout << "drawing thread exiting." << endl;
 }
 
@@ -174,7 +178,7 @@ void ObjectHighlighter::selectObjects(Frame &frame)
     }
 
     std::vector<cv::Rect> boundingBoxes;
-    cv::selectROIs("Video", frame.image, boundingBoxes);
+    cv::selectROIs(sMainTitle, frame.image, boundingBoxes);
 
     if (boundingBoxes.empty())
     {

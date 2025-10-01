@@ -41,7 +41,7 @@ void VideoProcessor::playVideo()
     cv::Mat frame;
     while (mControlNode.capRead(frame))
     {
-        cv::imshow("Video", frame);
+        cv::imshow(sMainTitle, frame);
 
         int key = cv::waitKey(1);
         if (key == 'q')
