@@ -13,11 +13,17 @@ using std::endl;
 
 void ObjectHighlighter::playVideo()
 {
-    if (!mCap.isOpened())
+    if (!mControlNode.capIsOpened())
     {
         cout << "No video loaded." << endl;
         return;
     }
+
+    // Initialize the VideoWriter for save functions
+    mVideoWriter = cv::VideoWriter("output.mp4",
+                                   cv::VideoWriter::fourcc('m', 'p', '4', 'v'),
+                                   mControlNode.capGet(cv::CAP_PROP_FPS),
+                                   cv::Size(mControlNode.capGet(cv::CAP_PROP_FRAME_WIDTH), mControlNode.capGet(cv::CAP_PROP_FRAME_HEIGHT)));
 
     {
         PlaybackState state;
@@ -32,98 +38,62 @@ void ObjectHighlighter::playVideo()
 
 void ObjectHighlighter::captureFrames(PlaybackState &state)
 {
-    Frame myFrame;
-
-    // Use a generation counter to invalidate queues
-    uint64_t localGen = state.processorGen;
+    Frame frame;
 
     // Use stop token to exit by user input
     std::stop_token st = state.stopSource.get_token();
 
     while (!st.stop_requested())
     {
-        bool ok;
-        {
-            // lock the VideoCapture object when reading or changing position
-            std::scoped_lock lock(mCapMutex);
-            ok = mCap.read(myFrame.frame);
-            if (ok)
-            {
-                // Get the index before releasing cap
-                myFrame.idx = mCap.get(cv::CAP_PROP_POS_FRAMES) - 1;
-            }
-        }
+        bool ok = mControlNode.capReadAndGet(frame);
+        state.processorQueue.push(frame, state.stopSource.get_token());
+
         if (ok)
         {
-            state.processorQueue.push(myFrame, state.stopSource.get_token());
+            continue;
         }
-        else
-        {
-            // Last frame to indicate reading done
-            myFrame.idx = -1;
-            myFrame.frame = cv::Mat();
-            state.processorQueue.push(myFrame, state.stopSource.get_token());
 
-            cout << "Finished capturing frames." << endl;
+        cout << "Finished capturing frames." << endl;
 
-            // Pause until either shut down or invalidation
-            // If we recieve a stop request, move past wait
-            std::stop_callback cb(st, [&]
-                                  { state.processorGen += 1;
-                                    state.processorGen.notify_one(); });
-
-            state.processorGen.wait(localGen);
-
-            if (st.stop_requested())
-            {
-                break;
-            }
-
-            localGen = state.processorGen;
-        }
+        // Wait until the generation changes
+        uint32_t localGen = mControlNode.generationGet();
+        mControlNode.generationWait(localGen);
     }
+
     cout << "capture thread exiting." << endl;
 }
 
 void ObjectHighlighter::updateTrackers(PlaybackState &state)
 {
+    Frame frame;
     std::stop_token st = state.stopSource.get_token();
 
     while (!st.stop_requested())
     {
         // Uses thread safe queue to wait and grab the next frame
         // If interrupted with stop token, returns nullopt
-        std::optional<Frame> myFrameOpt = state.processorQueue.waitAndPop(st);
+        std::optional<Frame> frameOpt = state.processorQueue.waitAndPop(st);
 
-        if (!myFrameOpt.has_value())
+        if (!frameOpt.has_value())
         {
-            break;
+            // Stop token or queue cleared
+            continue;
         }
 
-        Frame myFrame = std::move(*myFrameOpt);
+        frame = std::move(*frameOpt);
 
         // Check to see if done processing
-        if (myFrame.idx != -1)
+        if (frame.idx != -1)
         {
-            // Lock to prevent adding new trackers while iterating trackers
-            std::scoped_lock lock(mTrackersMutex);
-            if (state.trackerInvalid)
+            if (!mControlNode.trackersUpdateAndDraw(frame))
             {
-                // Discard invalid trackers if we've added new ones
-                state.trackerInvalid = false;
+                // Frame is not the right generation, continue
+                state.writerQueue.clear();
                 continue;
             }
-
-            auto start = std::chrono::high_resolution_clock::now();
-
-            trackOnFrame(myFrame);
-
-            auto end = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double> duration = end - start;
-            cout << "Tracking time: " << duration.count() << "s" << endl;
         }
 
-        state.writerQueue.push(myFrame, state.stopSource.get_token());
+        state.writerQueue.push(frame, state.stopSource.get_token());
     }
 
     cout << "update thread exiting." << endl;
@@ -135,30 +105,57 @@ void ObjectHighlighter::drawFrames(PlaybackState &state)
 
     while (!st.stop_requested())
     {
-        std::optional<Frame> myFrameOpt = state.writerQueue.waitAndPop(st);
+        std::optional<Frame> frameOpt = state.writerQueue.waitAndPop(st);
 
-        if (!myFrameOpt.has_value())
+        if (!frameOpt.has_value())
         {
-            // Stop requested
+            // Stop token or queue cleared
+            continue;
+        }
+
+        Frame frame = std::move(*frameOpt);
+
+        // If control is in save mode, just save the frame and move on
+        if (mControlNode.isSaving())
+        {
+            if (frame.generation != mControlNode.generationGet())
+            {
+                continue;
+            }
+
+            if (frame.idx == -1)
+            {
+                // Finished saving, return to main drawing
+                mControlNode.setIsSaving(0);
+                continue;
+            }
+
+            cout << "Saving frame " << frame.idx << endl;
+            mVideoWriter.write(frame.image);
+            continue;
+        }
+
+        if (frame.idx == -1)
+        {
+            // We have displayed all the frames, end program
+            state.stopSource.request_stop();
+            cv::waitKey(0);
+            mControlNode.capRelease();
             break;
         }
 
-        Frame myFrame = std::move(*myFrameOpt);
-
-        if (myFrame.idx == -1)
+        // Only show frames of the correct generation
+        if (frame.generation != mControlNode.generationGet())
         {
-            // We have displayed all the frames
-            state.stopSource.request_stop();
-            cv::waitKey(0);
-            break;
+            continue;
         }
 
         // Displays the video to the user
-        // cout << "****Showing frame: " << myFrame.idx << endl;
-        cv::imshow(sWindowTitle, myFrame.frame);
+        cv::imshow(sWindowTitle, frame.image);
 
+        // Allow user to interact with currently shown frame
         int key = cv::waitKey(1);
-        if (!handlePlaybackInput(key, state, myFrame))
+        if (!handlePlaybackInput(key, state, frame))
         {
             state.stopSource.request_stop();
             break;
@@ -169,66 +166,42 @@ void ObjectHighlighter::drawFrames(PlaybackState &state)
     cout << "drawing thread exiting." << endl;
 }
 
-void ObjectHighlighter::selectObjects(Frame &myFrame)
+void ObjectHighlighter::selectObjects(Frame &frame)
 {
-    if (!mCap.isOpened())
+    if (!mControlNode.capIsOpened())
     {
         cout << "No video loaded." << endl;
         return;
     }
 
     std::vector<cv::Rect> boundingBoxes;
-    // cout << "Selecting on frame: " << myFrame.idx << endl;
-    cv::selectROIs("Video", myFrame.frame, boundingBoxes);
+    cv::selectROIs("Video", frame.image, boundingBoxes);
 
-    for (auto bbox : boundingBoxes)
-    {
-        ObjectTracker ot;
-        cv::Ptr<cv::Tracker> tracker = cv::TrackerKCF::create();
-        tracker->init(myFrame.frame, bbox);
-        ot.box = bbox;
-        ot.tracker = tracker;
-        mTrackers.push_back(ot);
-    }
-}
-
-void ObjectHighlighter::trackOnFrame(Frame &myFrame)
-{
-    if (mTrackers.empty())
+    if (boundingBoxes.empty())
     {
         return;
     }
 
-    // Draw all highlights for the current frame
-    for (auto &tracker : mTrackers)
+    std::vector<ObjectTracker> trackers;
+    trackers.reserve(boundingBoxes.size());
+    for (auto bbox : boundingBoxes)
     {
-        if (tracker.tracker->update(myFrame.frame, tracker.box))
-        {
-            cv::rectangle(myFrame.frame, tracker.box, cv::Scalar(0, 255, 0));
-        }
+        ObjectTracker ot;
+        cv::Ptr<cv::Tracker> tracker = cv::TrackerKCF::create();
+        tracker->init(frame.image, bbox);
+        ot.box = bbox;
+        ot.tracker = tracker;
+        trackers.push_back(std::move(ot));
     }
+
+    mControlNode.trackersPushBackAndRewind(std::move(trackers), frame.idx);
 }
 
-bool ObjectHighlighter::handlePlaybackInput(int key, ObjectHighlighter::PlaybackState &state, Frame &myFrame)
+bool ObjectHighlighter::handlePlaybackInput(int key, ObjectHighlighter::PlaybackState &state, Frame &frame)
 {
     if (key == 'p')
     {
-        {
-            std::scoped_lock lock(mCapMutex, mTrackersMutex);
-            selectObjects(myFrame);
-            state.writerQueue.clear();
-            state.trackerInvalid = true;
-            // cout << "Writer queue cleared." << endl;
-            // Rewind to the current frame and throw out the items from the queues
-            // This may rewind BEFORE the myFrame.idx. That is okay.
-            // cout << "Cap mutex acquired." << endl;
-            mCap.set(cv::CAP_PROP_POS_FRAMES, myFrame.idx);
-            state.processorQueue.clear();
-            // cout << "Processor queue cleared." << endl;
-        }
-        // If the reader had finished, need to notify to wake
-        state.processorGen += 1;
-        state.processorGen.notify_one();
+        selectObjects(frame);
     }
     else if (key == 'q')
     {
@@ -236,153 +209,23 @@ bool ObjectHighlighter::handlePlaybackInput(int key, ObjectHighlighter::Playback
     }
     else if (key == 'r')
     {
-        {
-            std::scoped_lock lock(mCapMutex);
-            rewindVideo(-1);
-            state.processorQueue.clear();
-            state.writerQueue.clear();
-        }
-        // If the reader had finished, need to notify to wake
-        state.processorGen += 1;
-        state.processorGen.notify_one();
+        rewindVideo(-1);
     }
     else if (key == 'z')
     {
-        {
-            std::scoped_lock lock(mCapMutex);
-            rewindVideo(290);
-            state.processorQueue.clear();
-            state.writerQueue.clear();
-        }
-        // If the reader had finished, need to notify to wake
-        state.processorGen += 1;
-        state.processorGen.notify_one();
+        rewindVideo(290);
     }
     else if (key == 's')
     {
-        cout << "Saving video." << endl;
-        std::scoped_lock lock(mCapMutex, mTrackersMutex);
-        saveVideoWithHighlights("output.mp4", "ignored");
-        cout << "Video saved." << endl;
+        mControlNode.setIsSaving(1, frame.idx);
+    }
+    else if (key == 'o')
+    {
+        std::string filename = "frame_" + std::to_string(frame.idx) + ".jpg";
+        captureFrameWithHighlights(filename, frame.image);
     }
 
     return true;
-}
-
-void ObjectHighlighter::saveVideoWithHighlights(const std::string &outputPath, const std::string &format)
-{
-    auto start = std::chrono::high_resolution_clock::now();
-
-    double currentPos = mCap.get(cv::CAP_PROP_POS_FRAMES);
-
-    mCap.set(cv::CAP_PROP_POS_FRAMES, 0);
-
-    {
-        PlaybackState state;
-
-        std::jthread readerThread(&ObjectHighlighter::readFrames, this, std::ref(state));
-        std::jthread processorThread(&ObjectHighlighter::drawHighlights, this, std::ref(state));
-        std::jthread writerThread(&ObjectHighlighter::writeFrames, this, outputPath, format, std::ref(state));
-    }
-
-    mCap.set(cv::CAP_PROP_POS_FRAMES, currentPos);
-
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration = end - start;
-    cout << "Save video time: " << duration.count() << "s" << endl;
-}
-
-void ObjectHighlighter::readFrames(ObjectHighlighter::PlaybackState &state)
-{
-    cout << "starting save read" << endl;
-    if (!mCap.isOpened())
-    {
-        cout << "No video loaded." << endl;
-        return;
-    }
-
-    mCap.set(cv::CAP_PROP_POS_FRAMES, 0);
-
-    Frame myFrame;
-    std::stop_token st = state.stopSource.get_token();
-    while (!st.stop_requested() && mCap.read(myFrame.frame))
-    {
-        myFrame.idx = mCap.get(cv::CAP_PROP_POS_FRAMES);
-        state.processorQueue.push(myFrame, st);
-    }
-
-    // Push an empty frame to indicate completion
-    myFrame.idx = -1;
-    myFrame.frame = cv::Mat();
-    state.processorQueue.push(myFrame, st);
-}
-
-void ObjectHighlighter::drawHighlights(ObjectHighlighter::PlaybackState &state)
-{
-    cout << "starting save highlights" << endl;
-
-    std::stop_token st = state.stopSource.get_token();
-
-    while (!st.stop_requested())
-    {
-        std::optional<Frame> myFrameOpt = state.processorQueue.waitAndPop(st);
-
-        if (!myFrameOpt.has_value())
-        {
-            break;
-        }
-
-        Frame myFrame = std::move(*myFrameOpt);
-
-        // Check to see if done processing
-        if (myFrame.idx != -1)
-        {
-            trackOnFrame(myFrame);
-            state.writerQueue.push(myFrame, state.stopSource.get_token());
-        }
-        else
-        {
-            state.writerQueue.push(myFrame, state.stopSource.get_token());
-            break;
-        }
-    }
-}
-
-void ObjectHighlighter::writeFrames(const std::string &outputPath, const std::string &format, ObjectHighlighter::PlaybackState &state)
-{
-    cout << "starting save write" << endl;
-
-    cv::VideoWriter writer = cv::VideoWriter(outputPath,
-                                             cv::VideoWriter::fourcc('m', 'p', '4', 'v'),
-                                             mCap.get(cv::CAP_PROP_FPS),
-                                             cv::Size(mCap.get(cv::CAP_PROP_FRAME_WIDTH), mCap.get(cv::CAP_PROP_FRAME_HEIGHT)));
-
-    if (!writer.isOpened())
-    {
-        cout << "Writer not opened." << endl;
-        return;
-    }
-
-    while (!state.stopSource.stop_requested())
-    {
-        std::optional<Frame> myFrameOpt = state.writerQueue.waitAndPop(state.stopSource.get_token());
-
-        if (!myFrameOpt.has_value())
-        {
-            // Stop requested
-            break;
-        }
-
-        Frame myFrame = std::move(*myFrameOpt);
-
-        if (myFrame.idx == -1)
-        {
-            // Last frame already displayed, terminate
-            break;
-        }
-
-        writer.write(myFrame.frame);
-    }
 }
 
 void ObjectHighlighter::captureFrameWithHighlights(const std::string &outputPath, const cv::Mat &frame)

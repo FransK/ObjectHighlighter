@@ -14,7 +14,7 @@ LDFLAGS := $(OPENCV_LIBS)
 # Define our target location, file and source files
 BUILD_DIR := ./build
 TARGET := main
-SRC := main.cpp VideoProcessor.cpp ObjectHighlighter.cpp
+SRC := main.cpp VideoProcessor.cpp ObjectHighlighter.cpp ControlNode.cpp
 
 # Create our main from main.cpp using g++ flags
 # make will run the first target it sees if no argument given

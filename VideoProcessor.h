@@ -5,6 +5,8 @@
 
 #include "opencv2/highgui.hpp"
 
+#include "ControlNode.h"
+
 class VideoProcessor
 {
 public:
@@ -15,7 +17,7 @@ public:
     void rewindVideo(int time);
 
 protected:
-    cv::VideoCapture mCap;
+    ControlNode mControlNode{cv::VideoCapture()};
 };
 
 #endif

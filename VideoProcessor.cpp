@@ -8,16 +8,16 @@ using std::endl;
 
 void VideoProcessor::displayInfo()
 {
-    if (!mCap.isOpened())
+    if (!mControlNode.capIsOpened())
     {
         cout << "No video loaded." << endl;
         return;
     }
 
-    int fps = static_cast<int>(mCap.get(cv::CAP_PROP_FPS));
-    int frames = static_cast<int>(mCap.get(cv::CAP_PROP_FRAME_COUNT));
-    int width = static_cast<int>(mCap.get(cv::CAP_PROP_FRAME_WIDTH));
-    int height = static_cast<int>(mCap.get(cv::CAP_PROP_FRAME_HEIGHT));
+    int fps = static_cast<int>(mControlNode.capGet(cv::CAP_PROP_FPS));
+    int frames = static_cast<int>(mControlNode.capGet(cv::CAP_PROP_FRAME_COUNT));
+    int width = static_cast<int>(mControlNode.capGet(cv::CAP_PROP_FRAME_WIDTH));
+    int height = static_cast<int>(mControlNode.capGet(cv::CAP_PROP_FRAME_HEIGHT));
 
     cout << "FPS: " << fps << endl;
     cout << "Frame count: " << frames << endl;
@@ -27,19 +27,19 @@ void VideoProcessor::displayInfo()
 
 void VideoProcessor::loadVideo(const std::string &videoPath)
 {
-    mCap.open(videoPath);
+    mControlNode.capOpen(videoPath);
 }
 
 void VideoProcessor::playVideo()
 {
-    if (!mCap.isOpened())
+    if (!mControlNode.capIsOpened())
     {
         cout << "No video loaded." << endl;
         return;
     }
 
     cv::Mat frame;
-    while (mCap.read(frame))
+    while (mControlNode.capRead(frame))
     {
         cv::imshow("Video", frame);
 
@@ -67,7 +67,7 @@ void VideoProcessor::playVideo()
 
 void VideoProcessor::rewindVideo(int frames)
 {
-    if (!mCap.isOpened())
+    if (!mControlNode.capIsOpened())
     {
         cout << "No video loaded." << endl;
         return;
@@ -75,11 +75,11 @@ void VideoProcessor::rewindVideo(int frames)
 
     if (frames < 0)
     {
-        mCap.set(cv::CAP_PROP_POS_FRAMES, 0);
+        mControlNode.capSet(cv::CAP_PROP_POS_FRAMES, 0);
         return;
     }
 
-    // Subtract 1 because POS_FRAMES is the next frame read
-    int currentFrame = static_cast<int>(mCap.get(cv::CAP_PROP_POS_FRAMES)) - 1;
-    mCap.set(cv::CAP_PROP_POS_FRAMES, std::max(currentFrame - frames, 0));
+    // Subtract 1 because POS_FRAMES is the next frame capRead
+    int currentFrame = static_cast<int>(mControlNode.capGet(cv::CAP_PROP_POS_FRAMES)) - 1;
+    mControlNode.capSet(cv::CAP_PROP_POS_FRAMES, std::max(currentFrame - frames, 0));
 }
