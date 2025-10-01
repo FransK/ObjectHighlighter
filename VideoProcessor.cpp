@@ -25,9 +25,9 @@ void VideoProcessor::displayInfo()
     cout << "Resolution: " << width << " x " << height << endl;
 }
 
-void VideoProcessor::loadVideo(const std::string &videoPath)
+bool VideoProcessor::loadVideo(const std::string &videoPath)
 {
-    mControlNode.capOpen(videoPath);
+    return mControlNode.capOpen(videoPath);
 }
 
 void VideoProcessor::playVideo()

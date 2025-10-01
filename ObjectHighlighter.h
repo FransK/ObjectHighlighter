@@ -20,9 +20,7 @@ class ObjectHighlighter : public VideoProcessor
 public:
     ObjectHighlighter() = default;
     void playVideo() override;
-    void selectObjects(Frame &frame);
-    // void saveVideoWithHighlights(const std::string &outputPath, const std::string &format);
-    void captureFrameWithHighlights(const std::string &outputPath, const cv::Mat &frame);
+    void writerSettings(const std::string &outputPath, const std::string &format);
 
 private:
     struct PlaybackState
@@ -33,6 +31,8 @@ private:
         std::stop_source stopSource;
     };
 
+    std::string mOutputPath;
+    std::string mFormat;
     cv::VideoWriter mVideoWriter;
 
     // Playback pipeline
@@ -41,6 +41,9 @@ private:
     void drawFrames(PlaybackState &state);
 
     bool handlePlaybackInput(int key, PlaybackState &state, Frame &myFrame);
+    void selectObjects(Frame &frame);
+    bool loadWriter(const std::string &outputPath, const std::string &fourcc);
+    void captureFrameWithHighlights(const std::string &outputPath, const cv::Mat &frame);
 };
 
 #endif

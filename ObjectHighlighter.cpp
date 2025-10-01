@@ -11,6 +11,12 @@
 using std::cout;
 using std::endl;
 
+void ObjectHighlighter::writerSettings(const std::string &outputPath, const std::string &format)
+{
+    mOutputPath = outputPath;
+    mFormat = format;
+}
+
 void ObjectHighlighter::playVideo()
 {
     if (!mControlNode.capIsOpened())
@@ -18,12 +24,6 @@ void ObjectHighlighter::playVideo()
         cout << "No video loaded." << endl;
         return;
     }
-
-    // Initialize the VideoWriter for save functions
-    mVideoWriter = cv::VideoWriter("output.mp4",
-                                   cv::VideoWriter::fourcc('m', 'p', '4', 'v'),
-                                   mControlNode.capGet(cv::CAP_PROP_FPS),
-                                   cv::Size(mControlNode.capGet(cv::CAP_PROP_FRAME_WIDTH), mControlNode.capGet(cv::CAP_PROP_FRAME_HEIGHT)));
 
     {
         PlaybackState state;
@@ -130,7 +130,6 @@ void ObjectHighlighter::drawFrames(PlaybackState &state)
                 continue;
             }
 
-            cout << "Saving frame " << frame.idx << endl;
             mVideoWriter.write(frame.image);
             continue;
         }
@@ -184,7 +183,7 @@ void ObjectHighlighter::selectObjects(Frame &frame)
 
     std::vector<ObjectTracker> trackers;
     trackers.reserve(boundingBoxes.size());
-    for (auto bbox : boundingBoxes)
+    for (const auto &bbox : boundingBoxes)
     {
         ObjectTracker ot;
         cv::Ptr<cv::Tracker> tracker = cv::TrackerKCF::create();
@@ -217,7 +216,15 @@ bool ObjectHighlighter::handlePlaybackInput(int key, ObjectHighlighter::Playback
     }
     else if (key == 's')
     {
-        mControlNode.setIsSaving(1, frame.idx);
+        if (!loadWriter(mOutputPath, mFormat))
+        {
+            std::cerr << "Error: Could not open video writer: " << mOutputPath;
+            std::cerr << " with format: " << mFormat << std::endl;
+        }
+        else
+        {
+            mControlNode.setIsSaving(1, frame.idx);
+        }
     }
     else if (key == 'o')
     {
@@ -226,6 +233,34 @@ bool ObjectHighlighter::handlePlaybackInput(int key, ObjectHighlighter::Playback
     }
 
     return true;
+}
+
+bool ObjectHighlighter::loadWriter(const std::string &outputPath, const std::string &fourcc)
+{
+    // Default to mp4v codec
+    int fourccFormat = cv::VideoWriter::fourcc('m', 'p', '4', 'v');
+
+    // Check if fourcc has exactly 4 characters
+    if (fourcc.length() == 4)
+    {
+        fourccFormat = cv::VideoWriter::fourcc(
+            fourcc[0], fourcc[1], fourcc[2], fourcc[3]);
+    }
+    else
+    {
+        std::cerr << "Invalid fourcc length, using default mp4v" << std::endl;
+    }
+
+    // Initialize the VideoWriter for save functions
+    if (!outputPath.empty())
+    {
+        mVideoWriter = cv::VideoWriter(outputPath,
+                                       fourccFormat,
+                                       mControlNode.capGet(cv::CAP_PROP_FPS),
+                                       cv::Size(mControlNode.capGet(cv::CAP_PROP_FRAME_WIDTH), mControlNode.capGet(cv::CAP_PROP_FRAME_HEIGHT)));
+    }
+
+    return mVideoWriter.isOpened();
 }
 
 void ObjectHighlighter::captureFrameWithHighlights(const std::string &outputPath, const cv::Mat &frame)
