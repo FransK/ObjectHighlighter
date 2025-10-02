@@ -80,6 +80,7 @@ public:
     }
 
     // Wait until all submitted jobs are completed or timeout occurs
+    // Returns true if all jobs completed, false if timeout occurred
     template <typename Rep, typename Period>
     bool waitAll(const std::chrono::duration<Rep, Period> &timeout)
     {
