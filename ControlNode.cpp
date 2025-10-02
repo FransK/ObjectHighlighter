@@ -125,30 +125,34 @@ void ControlNode::trackersPushBackAndRewind(std::vector<ObjectTracker> &&tracker
 
 bool ControlNode::trackersUpdateAndDraw(const Frame &frame)
 {
-    std::scoped_lock lock(mTrackersMutex);
-
-    // If the frame generation does not match, return false
-    // This might occur if we had queued items from a previous generation
-    if (mGeneration.load() != frame.generation)
-    {
-        return false;
-    }
 
     // Create an overlay to draw the filled rectangles
+    // This is work that can be done outside the lock
     cv::Mat overlay = frame.image.clone();
 
-    // Update each tracker in parallel using the thread pool
-    for (auto &tracker : mTrackers)
     {
-        mThreadPool.submit([&tracker, &frame, &overlay]
-                           {
+        std::scoped_lock lock(mTrackersMutex);
+
+        // If the frame generation does not match, return false
+        // This might occur if we had queued items from a previous generation
+        if (mGeneration.load() != frame.generation)
+        {
+            return false;
+        }
+
+        // Update each tracker in parallel using the thread pool
+        for (auto &tracker : mTrackers)
+        {
+            mThreadPool.submit([&tracker, &frame, &overlay]
+                               {
             // Update the tracker with the current frame
             // If successful, draw the bounding box on the overlay
             if (tracker.tracker->update(frame.image, tracker.box))
             {
                 cv::rectangle(overlay, tracker.box, cv::Scalar(0, 255, 0), cv::FILLED);
             } });
-    }
+        }
+    } // Release the lock before waiting for threads to finish
 
     // Wait for all tracker updates to complete with a timeout
     if (!mThreadPool.waitAll(std::chrono::milliseconds(100)))
