@@ -1,7 +1,6 @@
 #ifndef THREAD_SAFE_QUEUE
 #define THREAD_SAFE_QUEUE
 
-#include <atomic>
 #include <condition_variable>
 #include <deque>
 #include <mutex>
