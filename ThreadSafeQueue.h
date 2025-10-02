@@ -16,7 +16,7 @@ private:
     std::condition_variable_any mNotFullCv, mNotEmptyCv;
     std::deque<T> mQueue;
     std::mutex mMutex;
-    std::atomic<uint32_t> mGeneration{0};
+    uint32_t mGeneration{0};
     uint32_t mMaxSize;
 
 public:
@@ -34,7 +34,7 @@ public:
     void push(T value, std::stop_token st)
     {
         std::unique_lock lock(mMutex);
-        uint32_t currentGen = mGeneration.load();
+        uint32_t currentGen = mGeneration;
 
         if (!mNotFullCv.wait(lock, st, [this]
                              { return mQueue.size() < mMaxSize; }))
@@ -43,7 +43,7 @@ public:
             return;
         }
 
-        if (mGeneration.load() != currentGen)
+        if (mGeneration != currentGen)
         {
             // Queue was cleared, don't add the item
             return;
@@ -63,7 +63,7 @@ public:
         {
             std::scoped_lock lock(mMutex);
             mQueue.clear();
-            mGeneration.fetch_add(1);
+            mGeneration += 1;
         }
 
         // Notify all waiting threads to recheck conditions
@@ -77,7 +77,7 @@ public:
     std::optional<T> waitAndPop(std::stop_token st)
     {
         std::unique_lock lock(mMutex);
-        uint32_t currentGen = mGeneration.load();
+        uint32_t currentGen = mGeneration;
 
         if (!mNotEmptyCv.wait(lock, st, [this]
                               { return !mQueue.empty(); }))
@@ -87,7 +87,7 @@ public:
         }
 
         // Check if queue cleared while waiting
-        if (mGeneration.load() != currentGen || mQueue.empty())
+        if (mGeneration != currentGen || mQueue.empty())
         {
             return std::nullopt;
         }
