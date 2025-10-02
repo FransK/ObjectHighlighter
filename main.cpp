@@ -5,6 +5,7 @@
 
 #include "opencv2/core.hpp"
 
+// Command line argument keys
 const char *keys =
     "{help h usage ?  |             | print this message            }"
     "{@video          |             | video file path (required)    }"
@@ -13,6 +14,7 @@ const char *keys =
 
 int main(int argc, char *argv[])
 {
+    // Parse command line arguments
     cv::CommandLineParser parser(argc, argv, keys);
     parser.about("Object Highlighter v1.0");
 
@@ -33,6 +35,11 @@ int main(int argc, char *argv[])
     // Get the video path from command line arguments
     std::string videoPath = parser.get<std::string>("@video");
 
+    // Get output path and format from command line arguments
+    std::string outputPath = parser.get<std::string>("output");
+    std::string format = parser.get<std::string>("format");
+
+    // Create ObjectHighlighter instance and load the video
     ObjectHighlighter vp;
     if (!vp.loadVideo(videoPath))
     {
@@ -40,13 +47,13 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    // Display video information
     vp.displayInfo();
 
-    std::string outputPath = parser.get<std::string>("output");
-    std::string format = parser.get<std::string>("format");
-
+    // Set writer settings
     vp.writerSettings(outputPath, format);
 
+    // Start video playback and processing
     vp.playVideo();
 
     return 0;

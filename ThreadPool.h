@@ -9,6 +9,7 @@
 class ThreadPool
 {
 private:
+    // Worker thread function
     void doWork(std::stop_token st)
     {
         while (!st.stop_requested())
@@ -24,10 +25,14 @@ private:
 
                 job = std::move(mWorkQueue.front());
                 mWorkQueue.pop_front();
+                // Unlock before executing the job
+                lock.unlock();
             }
 
+            // Execute the job
             job();
 
+            // Notify waitAll() if this was the last pending job
             if (mPendingJobs.fetch_sub(1) == 1)
             {
                 std::scoped_lock lock(mCompletionMutex);
@@ -47,6 +52,7 @@ private:
     std::condition_variable mCompletionCv;
 
 public:
+    // Constructor with number of threads and stop token
     ThreadPool(int n, std::stop_token st)
     {
         for (int i = 0; i < n; ++i)
@@ -54,9 +60,15 @@ public:
             mWorkers.emplace_back(&ThreadPool::doWork, this, st);
         }
     }
-
+    // Default destructor
     ~ThreadPool() = default;
+    // Delete copy and move constructors and assignment operators
+    ThreadPool(const ThreadPool &) = delete;
+    ThreadPool &operator=(const ThreadPool &) = delete;
+    ThreadPool(ThreadPool &&) = delete;
+    ThreadPool &operator=(ThreadPool &&) = delete;
 
+    // Submit a new job to the thread pool
     void submit(std::function<void()> job)
     {
         mPendingJobs.fetch_add(1);
@@ -67,6 +79,7 @@ public:
         mWorkCv.notify_one();
     }
 
+    // Wait until all submitted jobs are completed or timeout occurs
     template <typename Rep, typename Period>
     bool waitAll(const std::chrono::duration<Rep, Period> &timeout)
     {

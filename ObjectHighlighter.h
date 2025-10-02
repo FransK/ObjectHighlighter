@@ -2,7 +2,7 @@
 #define OBJECT_HIGHLIGHTER
 
 #include "DataStructs.h"
-#include "ThreadSafeQ.h"
+#include "ThreadSafeQueue.h"
 #include "VideoProcessor.h"
 
 #include <condition_variable>
@@ -13,20 +13,28 @@
 
 #include "opencv2/tracking.hpp"
 
+// Window title for saving frames
 static const std::string sSaveWindowTitle{"Saving..."};
 
 class ObjectHighlighter : public VideoProcessor
 {
 public:
     ObjectHighlighter() = default;
+    ~ObjectHighlighter() override = default;
+    // Delete copy and move constructors and assignment operators
+    ObjectHighlighter(const ObjectHighlighter &) = delete;
+    ObjectHighlighter &operator=(const ObjectHighlighter &) = delete;
+    ObjectHighlighter(ObjectHighlighter &&other) = delete;
+    ObjectHighlighter &operator=(ObjectHighlighter &&other) = delete;
+
     void playVideo() override;
     void writerSettings(const std::string &outputPath, const std::string &format);
 
 private:
     struct PlaybackState
     {
-        ThreadSafeQ<Frame> processorQueue{8};
-        ThreadSafeQ<Frame> writerQueue{8};
+        ThreadSafeQueue<Frame> processorQueue{8};
+        ThreadSafeQueue<Frame> writerQueue{8};
     };
 
     std::string mOutputPath;

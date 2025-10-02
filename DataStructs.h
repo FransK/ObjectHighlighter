@@ -4,6 +4,7 @@
 #include "opencv2/highgui.hpp"
 #include "opencv2/tracking.hpp"
 
+// Frame structure to hold image and metadata
 struct Frame
 {
     int idx;
@@ -11,6 +12,7 @@ struct Frame
     cv::Mat image;
 };
 
+// Object tracker structure to hold tracker instance and bounding box
 struct ObjectTracker
 {
     cv::Ptr<cv::Tracker> tracker;
