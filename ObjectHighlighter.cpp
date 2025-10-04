@@ -1,7 +1,10 @@
+#include "DataStructs.h"
 #include "ObjectHighlighter.h"
 
+#include <cstdint>
 #include <iostream>
-#include <thread>
+#include <optional>
+#include <string>
 
 #include "opencv2/features2d.hpp"
 #include "opencv2/imgproc.hpp"
@@ -9,6 +12,9 @@
 
 using std::cout;
 using std::endl;
+
+// Constant for the number of frames to rewind when 'z' is pressed
+constexpr int kRewindFrameCount = 290;
 
 // Set the output path and format for the video writer
 void ObjectHighlighter::writerSettings(const std::string &outputPath, const std::string &format)
@@ -266,7 +272,7 @@ bool ObjectHighlighter::handlePlaybackInput(int key, ObjectHighlighter::Playback
     }
     else if (key == 'z')
     {
-        rewindVideo(290);
+        rewindVideo(kRewindFrameCount);
     }
     else if (key == 's')
     {

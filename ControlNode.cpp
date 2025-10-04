@@ -125,7 +125,6 @@ void ControlNode::trackersPushBackAndRewind(std::vector<ObjectTracker> &&tracker
 
 bool ControlNode::trackersUpdateAndDraw(const Frame &frame)
 {
-
     // Create an overlay to draw the filled rectangles
     // This is work that can be done outside the lock
     cv::Mat overlay = frame.image.clone();
