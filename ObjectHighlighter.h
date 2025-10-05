@@ -14,7 +14,12 @@
 #include "opencv2/tracking.hpp"
 
 // Window title for saving frames
-static const std::string sSaveWindowTitle{"Saving..."};
+constexpr std::string sSaveWindowTitle{"Saving..."};
+constexpr int sProcessorQueueSize{8};
+constexpr int sWriterQueueSize{8};
+// Constant for the number of frames to rewind when 'z' is pressed
+// Currently just hardcoded for 10s on a 29fps video
+constexpr int sRewindFrameCount{290};
 
 class ObjectHighlighter : public VideoProcessor
 {
@@ -33,8 +38,8 @@ public:
 private:
     struct PlaybackState
     {
-        ThreadSafeQueue<Frame> processorQueue{8};
-        ThreadSafeQueue<Frame> writerQueue{8};
+        ThreadSafeQueue<Frame> processorQueue{sProcessorQueueSize};
+        ThreadSafeQueue<Frame> writerQueue{sWriterQueueSize};
     };
 
     std::string mOutputPath;

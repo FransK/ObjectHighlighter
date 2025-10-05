@@ -16,6 +16,7 @@ private:
         {
             std::function<void()> job;
             {
+                // Wait for a job to be available or stop requested
                 std::unique_lock lock(mWorkMutex);
                 if (!mWorkCv.wait(lock, st, [this]
                                   { return !mWorkQueue.empty(); }))
@@ -23,6 +24,7 @@ private:
                     return;
                 }
 
+                // Get the next job
                 job = std::move(mWorkQueue.front());
                 mWorkQueue.pop_front();
                 // Unlock before executing the job
@@ -41,6 +43,7 @@ private:
         }
     }
 
+    // Members for job queue and worker threads
     std::deque<std::function<void()>> mWorkQueue;
     std::vector<std::jthread> mWorkers;
     std::mutex mWorkMutex;
@@ -71,8 +74,10 @@ public:
     // Submit a new job to the thread pool
     void submit(std::function<void()> job)
     {
+        // Increment pending jobs counter
         mPendingJobs.fetch_add(1);
         {
+            // Add the job to the queue
             std::scoped_lock lock(mWorkMutex);
             mWorkQueue.push_back(std::move(job));
         }

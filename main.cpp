@@ -26,13 +26,6 @@ int main(int argc, char *argv[])
         return 0;
     }
 
-    // Check if the parser is correctly initialized
-    if (!parser.check())
-    {
-        parser.printErrors();
-        return 1;
-    }
-
     // Get the video path from command line arguments
     std::string videoPath = parser.get<std::string>("@video");
 
@@ -40,22 +33,30 @@ int main(int argc, char *argv[])
     std::string outputPath = parser.get<std::string>("output");
     std::string format = parser.get<std::string>("format");
 
+    // Check if the parser is correctly initialized
+    // Needs to happen after get calls as they set the error flag
+    if (!parser.check())
+    {
+        parser.printErrors();
+        return 1;
+    }
+
     // Create ObjectHighlighter instance and load the video
-    ObjectHighlighter vp;
-    if (!vp.loadVideo(videoPath))
+    ObjectHighlighter highlighter;
+    if (!highlighter.loadVideo(videoPath))
     {
         std::cerr << "Error: Could not open video file: " << videoPath << std::endl;
         return 1;
     }
 
     // Display video information
-    vp.displayInfo();
+    highlighter.displayInfo();
 
     // Set writer settings
-    vp.writerSettings(outputPath, format);
+    highlighter.writerSettings(outputPath, format);
 
     // Start video playback and processing
-    vp.playVideo();
+    highlighter.playVideo();
 
     return 0;
 }

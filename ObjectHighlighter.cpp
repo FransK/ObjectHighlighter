@@ -13,9 +13,6 @@
 using std::cout;
 using std::endl;
 
-// Constant for the number of frames to rewind when 'z' is pressed
-constexpr int kRewindFrameCount = 290;
-
 // Set the output path and format for the video writer
 void ObjectHighlighter::writerSettings(const std::string &outputPath, const std::string &format)
 {
@@ -272,7 +269,7 @@ bool ObjectHighlighter::handlePlaybackInput(int key, ObjectHighlighter::Playback
     }
     else if (key == 'z')
     {
-        rewindVideo(kRewindFrameCount);
+        rewindVideo(sRewindFrameCount);
     }
     else if (key == 's')
     {
