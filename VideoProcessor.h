@@ -13,7 +13,7 @@ static const std::string sMainTitle = "Video Processor";
 class VideoProcessor
 {
 public:
-    VideoProcessor() = default;
+    VideoProcessor() : mControlNode(std::make_shared<ControlNode>(cv::VideoCapture())) {}
     virtual ~VideoProcessor() = default;
     // Delete copy and move constructors and assignment operators
     // This avoids issues with ControlNode's VideoCapture,
@@ -32,7 +32,7 @@ public:
 protected:
     // Control node for managing video capture and processing
     // across multiple threads
-    ControlNode mControlNode{cv::VideoCapture()};
+    std::shared_ptr<ControlNode> mControlNode;
 };
 
 #endif

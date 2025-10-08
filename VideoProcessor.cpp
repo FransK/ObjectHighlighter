@@ -10,17 +10,17 @@ using std::endl;
 void VideoProcessor::displayInfo()
 {
     // Check if video is loaded
-    if (!mControlNode.capIsOpened())
+    if (!mControlNode->capIsOpened())
     {
         cout << "No video loaded." << endl;
         return;
     }
 
     // Retrieve video properties
-    int fps = static_cast<int>(mControlNode.capGet(cv::CAP_PROP_FPS));
-    int frames = static_cast<int>(mControlNode.capGet(cv::CAP_PROP_FRAME_COUNT));
-    int width = static_cast<int>(mControlNode.capGet(cv::CAP_PROP_FRAME_WIDTH));
-    int height = static_cast<int>(mControlNode.capGet(cv::CAP_PROP_FRAME_HEIGHT));
+    int fps = static_cast<int>(mControlNode->capGet(cv::CAP_PROP_FPS));
+    int frames = static_cast<int>(mControlNode->capGet(cv::CAP_PROP_FRAME_COUNT));
+    int width = static_cast<int>(mControlNode->capGet(cv::CAP_PROP_FRAME_WIDTH));
+    int height = static_cast<int>(mControlNode->capGet(cv::CAP_PROP_FRAME_HEIGHT));
 
     // Display video information
     cout << "FPS: " << fps << endl;
@@ -33,14 +33,14 @@ void VideoProcessor::displayInfo()
 bool VideoProcessor::loadVideo(const std::string &videoPath)
 {
     // Open the video file using the control node
-    return mControlNode.capOpen(videoPath);
+    return mControlNode->capOpen(videoPath);
 }
 
 // Play the loaded video, allowing for pausing and rewinding
 void VideoProcessor::playVideo()
 {
     // Check if video is loaded
-    if (!mControlNode.capIsOpened())
+    if (!mControlNode->capIsOpened())
     {
         cout << "No video loaded." << endl;
         return;
@@ -48,7 +48,7 @@ void VideoProcessor::playVideo()
 
     // Frame display loop
     cv::Mat frame;
-    while (mControlNode.capRead(frame))
+    while (mControlNode->capRead(frame))
     {
         // Display the frame
         cv::imshow(sMainTitle, frame);
@@ -81,7 +81,7 @@ void VideoProcessor::playVideo()
 void VideoProcessor::rewindVideo(int frames)
 {
     // Check if video is loaded
-    if (!mControlNode.capIsOpened())
+    if (!mControlNode->capIsOpened())
     {
         cout << "No video loaded." << endl;
         return;
@@ -90,13 +90,13 @@ void VideoProcessor::rewindVideo(int frames)
     // If frames is negative, rewind to the start
     if (frames < 0)
     {
-        mControlNode.capSet(cv::CAP_PROP_POS_FRAMES, 0);
+        mControlNode->capSet(cv::CAP_PROP_POS_FRAMES, 0);
         return;
     }
 
     // Subtract 1 because POS_FRAMES is the next frame to be read
-    int currentFrame = static_cast<int>(mControlNode.capGet(cv::CAP_PROP_POS_FRAMES)) - 1;
+    int currentFrame = static_cast<int>(mControlNode->capGet(cv::CAP_PROP_POS_FRAMES)) - 1;
 
     // Set the new frame position, ensuring it doesn't go below 0
-    mControlNode.capSet(cv::CAP_PROP_POS_FRAMES, std::max(currentFrame - frames, 0));
+    mControlNode->capSet(cv::CAP_PROP_POS_FRAMES, std::max(currentFrame - frames, 0));
 }

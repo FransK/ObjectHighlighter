@@ -2,6 +2,7 @@
 CXXFLAGS := -std=c++20 -Wall -O2
 ASMFLAGS := -S -fverbose-asm
 PROFILEFLAGS := -pg -fno-omit-frame-pointer
+DEBUGFLAGS := -g
 
 # Use pkg-config to find the opencv directories
 OPENCV_CFLAGS := $(shell pkg-config --cflags opencv4)
@@ -29,6 +30,9 @@ clean:
 
 profile: $(SRC)
 	$(CXX) $(CXXFLAGS) $(PROFILEFLAGS) -o $(BUILD_DIR)/$@ $^ $(LDFLAGS)
+
+debug: $(SRC)
+	$(CXX) $(CXXFLAGS) $(DEBUGFLAGS) -o $(BUILD_DIR)/$@ $^ $(LDFLAGS)
 
 asm: ObjectHighlighter.cpp
 	$(CXX) $(CXXFLAGS) $(ASMFLAGS) -o $(BUILD_DIR)/ObjectHighlighter.s ObjectHighlighter.cpp

@@ -31,25 +31,9 @@ public:
     void writerSettings(const std::string &outputPath, const std::string &format);
 
 private:
-    struct PlaybackState
-    {
-        ThreadSafeQueue<Frame> processorQueue{8};
-        ThreadSafeQueue<Frame> writerQueue{8};
-    };
-
     std::string mOutputPath;
     std::string mFormat;
     cv::VideoWriter mVideoWriter;
-
-    // Playback pipeline
-    void captureFrames(PlaybackState &state);
-    void updateTrackers(PlaybackState &state);
-    void drawFrames(PlaybackState &state);
-
-    bool handlePlaybackInput(int key, PlaybackState &state, Frame &myFrame);
-    void selectObjects(Frame &frame);
-    bool loadWriter(const std::string &outputPath, const std::string &fourcc);
-    void captureFrameWithHighlights(const std::string &outputPath, const cv::Mat &frame);
 };
 
 #endif

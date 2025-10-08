@@ -41,21 +41,21 @@ int main(int argc, char *argv[])
     std::string format = parser.get<std::string>("format");
 
     // Create ObjectHighlighter instance and load the video
-    ObjectHighlighter vp;
-    if (!vp.loadVideo(videoPath))
+    ObjectHighlighter objectHighlighter;
+    if (!objectHighlighter.loadVideo(videoPath))
     {
         std::cerr << "Error: Could not open video file: " << videoPath << std::endl;
         return 1;
     }
 
     // Display video information
-    vp.displayInfo();
+    objectHighlighter.displayInfo();
 
     // Set writer settings
-    vp.writerSettings(outputPath, format);
+    objectHighlighter.writerSettings(outputPath, format);
 
     // Start video playback and processing
-    vp.playVideo();
+    objectHighlighter.playVideo();
 
     return 0;
 }
