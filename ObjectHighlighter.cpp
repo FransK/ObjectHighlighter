@@ -30,8 +30,8 @@ void ObjectHighlighter::playVideo()
         return;
     }
 
-    auto readerTrackerQueue = std::make_shared<ThreadSafeQueue<Frame>>(8);
-    auto trackerWriterQueue = std::make_shared<ThreadSafeQueue<Frame>>(8);
+    auto readerTrackerQueue = std::make_shared<ThreadSafeQueue<Frame>>(sProcessorQueueSize);
+    auto trackerWriterQueue = std::make_shared<ThreadSafeQueue<Frame>>(sWriterQueueSize);
 
     auto readerNode = NodeRunner<ReaderNode>(ReaderNode(mControlNode, readerTrackerQueue),
                                              mControlNode);

@@ -10,6 +10,10 @@
 
 #include "opencv2/highgui.hpp"
 
+constexpr int sMaxThreads{16};
+
+// Holds the state and synchronization primitives
+// for video processing across multiple threads
 class ControlNode
 {
 private:
@@ -35,7 +39,7 @@ private:
     ThreadPool mThreadPool;
 
 public:
-    ControlNode(cv::VideoCapture cap) : mCap(std::move(cap)), mThreadPool(4, mStopSource.get_token()) {}
+    ControlNode(cv::VideoCapture cap) : mCap(std::move(cap)), mThreadPool(sMaxThreads, mStopSource.get_token()) {}
     ~ControlNode() = default;
 
     // Delete copy and move constructors and assignment operators

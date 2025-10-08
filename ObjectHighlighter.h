@@ -14,7 +14,8 @@
 #include "opencv2/tracking.hpp"
 
 // Window title for saving frames
-static const std::string sSaveWindowTitle{"Saving..."};
+constexpr int sProcessorQueueSize{8};
+constexpr int sWriterQueueSize{8};
 
 class ObjectHighlighter : public VideoProcessor
 {

@@ -26,19 +26,20 @@ int main(int argc, char *argv[])
         return 0;
     }
 
-    // Check if the parser is correctly initialized
-    if (!parser.check())
-    {
-        parser.printErrors();
-        return 1;
-    }
-
     // Get the video path from command line arguments
     std::string videoPath = parser.get<std::string>("@video");
 
     // Get output path and format from command line arguments
     std::string outputPath = parser.get<std::string>("output");
     std::string format = parser.get<std::string>("format");
+
+    // Check if the parser is correctly initialized
+    // Needs to happen after get calls as they set the error flag
+    if (!parser.check())
+    {
+        parser.printErrors();
+        return 1;
+    }
 
     // Create ObjectHighlighter instance and load the video
     ObjectHighlighter objectHighlighter;

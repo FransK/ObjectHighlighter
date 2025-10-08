@@ -99,8 +99,12 @@ bool ControlNode::capReadAndGet(Frame &frame)
 
 void ControlNode::capRelease()
 {
+    // Lock the capture mutex to ensure thread safety
+    // then release the capture
     std::scoped_lock lock(mCapMutex);
     mCap.release();
+
+    // Increment the generation and notify all waiting threads
     mGeneration.fetch_add(1);
     mGeneration.notify_all();
 }
@@ -176,22 +180,24 @@ void ControlNode::setIsSaving(uint32_t value, uint32_t returnIndex)
     }
 
     // Lock both mutexes to ensure thread safety
-    std::scoped_lock lock(mCapMutex, mTrackersMutex);
-    if (value == 1)
     {
-        // Start saving: store the return index and rewind to frame 0
-        mReturnIndex = returnIndex;
-        mCap.set(cv::CAP_PROP_POS_FRAMES, 0);
-    }
-    else
-    {
-        // Stop saving: rewind to the stored return index
-        mCap.set(cv::CAP_PROP_POS_FRAMES, mReturnIndex);
-    }
+        std::scoped_lock lock(mCapMutex, mTrackersMutex);
+        if (value == 1)
+        {
+            // Start saving: store the return index and rewind to frame 0
+            mReturnIndex = returnIndex;
+            mCap.set(cv::CAP_PROP_POS_FRAMES, 0);
+        }
+        else
+        {
+            // Stop saving: rewind to the stored return index
+            mCap.set(cv::CAP_PROP_POS_FRAMES, mReturnIndex);
+        }
 
-    // Toggle the saving state and increment the generation
-    mSaveState.fetch_xor(1);
-    mGeneration.fetch_add(1);
+        // Toggle the saving state and increment the generation
+        mSaveState.fetch_xor(1);
+        mGeneration.fetch_add(1);
+    }
 
     // Notify all waiting threads about the state change
     mSaveState.notify_all();
