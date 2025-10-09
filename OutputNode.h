@@ -46,8 +46,9 @@ public:
 
     OutputNode(const OutputNode &) = delete;
     OutputNode &operator=(const OutputNode &) = delete;
-    OutputNode(OutputNode &&) = default;
-    OutputNode &operator=(OutputNode &&) = default;
+
+    OutputNode(OutputNode &&) noexcept = default;
+    OutputNode &operator=(OutputNode &&) noexcept = default;
 
     // Node concept methods
     std::optional<Frame> getFrame(std::stop_token st);

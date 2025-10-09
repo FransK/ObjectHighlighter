@@ -24,8 +24,9 @@ public:
 
     TrackerNode(const TrackerNode &) = delete;
     TrackerNode operator=(const TrackerNode &) = delete;
-    TrackerNode(TrackerNode &&) = default;
-    TrackerNode &operator=(TrackerNode &&) = default;
+
+    TrackerNode(TrackerNode &&) noexcept = default;
+    TrackerNode &operator=(TrackerNode &&) noexcept = default;
 
     // Node concept methods
     std::optional<Frame> getFrame(std::stop_token st);

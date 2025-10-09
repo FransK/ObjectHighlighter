@@ -1,8 +1,9 @@
 # Set the C++ version to the one we are using and -Wall -O2 for production
-CXXFLAGS := -std=c++20 -Wall -O2
+CXXFLAGS := -std=c++20 -Wall
 ASMFLAGS := -S -fverbose-asm
 PROFILEFLAGS := -pg -fno-omit-frame-pointer
-DEBUGFLAGS := -g
+DEBUGFLAGS := -g -O0
+RELEASEFLAGS := -O2
 
 # Use pkg-config to find the opencv directories
 OPENCV_CFLAGS := $(shell pkg-config --cflags opencv4)
@@ -22,7 +23,7 @@ SRC := $(wildcard *.cpp)
 # Create our main from main.cpp using g++ flags
 # make will run the first target it sees if no argument given
 $(TARGET): $(SRC)
-	$(CXX) $(CXXFLAGS) -o $(BUILD_DIR)/$@ $^ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(RELEASEFLAGS) -o $(BUILD_DIR)/$@ $^ $(LDFLAGS)
 
 # Target for clean (no dependencies, just clear out the executable)
 clean:

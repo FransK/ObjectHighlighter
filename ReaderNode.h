@@ -23,8 +23,9 @@ public:
 
     ReaderNode(const ReaderNode &) = delete;
     ReaderNode &operator=(const ReaderNode &) = delete;
-    ReaderNode(ReaderNode &&other) = default;
-    ReaderNode &operator=(ReaderNode &&other) = default;
+
+    ReaderNode(ReaderNode &&) noexcept = default;
+    ReaderNode &operator=(ReaderNode &&) noexcept = default;
 
     // Node concept methods
     std::optional<Frame> getFrame(std::stop_token st);
