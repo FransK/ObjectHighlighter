@@ -131,7 +131,6 @@ bool ControlNode::trackersUpdateAndDraw(const Frame &frame)
 {
     // Create an overlay to draw the filled rectangles
     // This is work that can be done outside the lock
-    cv::Mat overlay = frame.image.clone();
 
     {
         std::scoped_lock lock(mTrackersMutex);
@@ -146,13 +145,15 @@ bool ControlNode::trackersUpdateAndDraw(const Frame &frame)
         // Update each tracker in parallel using the thread pool
         for (auto &tracker : mTrackers)
         {
-            mThreadPool.submit([&tracker, &frame, &overlay]
+            mThreadPool.submit([&tracker, &frame]
                                {
             // Update the tracker with the current frame
             // If successful, draw the bounding box on the overlay
             if (tracker.tracker->update(frame.image, tracker.box))
             {
-                cv::rectangle(overlay, tracker.box, cv::Scalar(0, 255, 0), cv::FILLED);
+                cv::Mat roi = frame.image(tracker.box);
+                roi.convertTo(roi, roi.type(), 0.7);           // scale existing pixels
+                roi += cv::Scalar(0, 255 * 0.3, 0.0);          // add green contribution
             } });
         }
     } // Release the lock before waiting for threads to finish
@@ -162,10 +163,6 @@ bool ControlNode::trackersUpdateAndDraw(const Frame &frame)
     {
         std::cout << "Warning: Not all tracker updates completed within the timeout." << std::endl;
     }
-
-    // Blend the overlay with the original frame to create a transparent effect
-    const double alpha = 0.30;
-    cv::addWeighted(overlay, alpha, frame.image, 1.0 - alpha, 0.0, frame.image);
 
     // Frame generation was correct and processing is done
     return true;

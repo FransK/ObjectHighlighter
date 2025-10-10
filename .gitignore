@@ -7,3 +7,5 @@ output*
 *profile*
 .gitignore
 .clang-tidy
+perf.*
+out.perf*
