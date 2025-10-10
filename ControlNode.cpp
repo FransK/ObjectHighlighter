@@ -129,32 +129,47 @@ void ControlNode::trackersPushBackAndRewind(std::vector<ObjectTracker> &&tracker
 
 bool ControlNode::trackersUpdateAndDraw(const Frame &frame)
 {
-    // Create an overlay to draw the filled rectangles
-    // This is work that can be done outside the lock
+    static thread_local int updateCounter = 0;
+    static thread_local uint32_t lastGeneration = 0;
+
+    if (lastGeneration != frame.generation)
+    {
+        lastGeneration = frame.generation;
+        updateCounter = 0; // Reset counter for new generation
+    }
+
+    constexpr int kUpdateStride = 5;
+    const bool doUpdate = (updateCounter++ % kUpdateStride) == 0;
+
+    // If the frame generation does not match, return false
+    // This might occur if we had queued items from a previous generation
+    if (mGeneration.load() != frame.generation)
+    {
+        return false;
+    }
 
     {
         std::scoped_lock lock(mTrackersMutex);
 
-        // If the frame generation does not match, return false
-        // This might occur if we had queued items from a previous generation
-        if (mGeneration.load() != frame.generation)
-        {
-            return false;
-        }
-
         // Update each tracker in parallel using the thread pool
         for (auto &tracker : mTrackers)
         {
-            mThreadPool.submit([&tracker, &frame]
+            mThreadPool.submit([&tracker, &frame, doUpdate]
                                {
-            // Update the tracker with the current frame
-            // If successful, draw the bounding box on the overlay
-            if (tracker.tracker->update(frame.image, tracker.box))
-            {
-                cv::Mat roi = frame.image(tracker.box);
-                roi.convertTo(roi, roi.type(), 0.7);           // scale existing pixels
-                roi += cv::Scalar(0, 255 * 0.3, 0.0);          // add green contribution
-            } });
+                                   // Update the tracker with the current frame
+                                   // If successful, draw the bounding box on the overlay
+                                   if (doUpdate)
+                                   {
+                                       tracker.active = tracker.tracker->update(frame.image, tracker.box);
+                                   }
+                                   if (!tracker.active)
+                                   {
+                                       return;
+                                   }
+                                   cv::Mat roi = frame.image(tracker.box);
+                                   roi.convertTo(roi, roi.type(), 0.7);  // scale existing pixels
+                                   roi += cv::Scalar(0, 255 * 0.3, 0.0); // add green contribution
+                               });
         }
     } // Release the lock before waiting for threads to finish
 

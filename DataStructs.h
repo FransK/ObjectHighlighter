@@ -17,6 +17,7 @@ struct ObjectTracker
 {
     cv::Ptr<cv::Tracker> tracker;
     cv::Rect box;
+    bool active{true};
 };
 
 #endif
