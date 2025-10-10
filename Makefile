@@ -1,7 +1,7 @@
 # Set the C++ version to the one we are using and -Wall -O2 for production
 CXXFLAGS := -std=c++20 -Wall
 ASMFLAGS := -S -fverbose-asm
-PROFILEFLAGS := -pg -fno-omit-frame-pointer
+PROFILEFLAGS := -g -fno-omit-frame-pointer
 DEBUGFLAGS := -g -O0
 RELEASEFLAGS := -O2
 
@@ -30,7 +30,7 @@ clean:
 	rm -f $(BUILD_DIR)/$(TARGET)
 
 profile: $(SRC)
-	$(CXX) $(CXXFLAGS) $(PROFILEFLAGS) -o $(BUILD_DIR)/$@ $^ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(PROFILEFLAGS) $(RELEASEFLAGS) -o $(BUILD_DIR)/$@ $^ $(LDFLAGS)
 
 debug: $(SRC)
 	$(CXX) $(CXXFLAGS) $(DEBUGFLAGS) -o $(BUILD_DIR)/$@ $^ $(LDFLAGS)

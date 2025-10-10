@@ -12,6 +12,32 @@ std::optional<Frame> OutputNode::getFrame(std::stop_token st)
 
 void OutputNode::updateFrame(Frame &frame)
 {
+#ifdef ENABLE_PROFILING
+    static bool doOnce = true;
+    if (doOnce)
+    {
+        doOnce = false;
+
+        cv::Rect rect = cv::Rect(281, 426, 192, 262);
+
+        std::vector<ObjectTracker> trackers;
+        ObjectTracker ot;
+
+        // Create a KCF tracker
+        cv::Ptr<cv::Tracker> tracker = cv::TrackerKCF::create();
+
+        // Initialize the tracker with the current frame and bounding box
+        tracker->init(frame.image, rect);
+
+        // Store the tracker and bounding box
+        ot.box = rect;
+        ot.tracker = tracker;
+        trackers.push_back(ot);
+
+        // Push the new trackers to the control node and rewind to the current frame
+        mControlNode->trackersPushBackAndRewind(std::move(trackers), frame.idx);
+    }
+#endif
 }
 
 void OutputNode::passFrame(const Frame &frame, std::stop_token st)
@@ -42,12 +68,19 @@ void OutputNode::passFrame(const Frame &frame, std::stop_token st)
     {
         // We have displayed all the frames, end program
         mControlNode->stopSourceGet().request_stop();
+
+#ifndef ENABLE_PROFILING
         cv::waitKey(0);
+#endif
 
         // Release the video capture
         mControlNode->capRelease();
         return;
     }
+
+#ifdef ENABLE_PROFILING
+    return;
+#endif
 
     // Displays the video to the user
     cv::imshow(mWindowName, frame.image);
